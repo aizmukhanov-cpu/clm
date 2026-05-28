@@ -76,10 +76,10 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
   ]);
 
   const managers =
-    session.role === UserRole.MANAGER
+    session.role === "SPECIALIST" || session.role === "KAM"
       ? []
       : await db.user.findMany({
-          where: { role: UserRole.MANAGER },
+          where: { role: { in: ["SPECIALIST", "SUPERVISOR"] } },
           select: { id: true, name: true },
           orderBy: { name: "asc" },
         });

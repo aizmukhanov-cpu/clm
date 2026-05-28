@@ -6,12 +6,13 @@ import { CLMStage, CLMCohort, UserRole } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ALLOWED } from "@/lib/clm-config";
-import { clientAccessWhere, canViewClient } from "@/lib/access";
+import { clientAccessWhere } from "@/lib/access";
 
 export type ClientFilters = {
   search?: string;
   stage?: string;
   cohort?: string;
+  size?: string;
   branchId?: string;
   team?: string;
   page?: number;
@@ -40,9 +41,10 @@ export async function getClients(filters: ClientFilters = {}) {
       { name: { contains: filters.search, mode: "insensitive" } },
     ];
   }
-  if (filters.stage   && filters.stage   !== "ALL") where.clmStage  = filters.stage  as CLMStage;
-  if (filters.cohort  && filters.cohort  !== "ALL") where.clmCohort = filters.cohort as CLMCohort;
-  if (filters.branchId && filters.branchId !== "ALL") where.branchId = filters.branchId;
+  if (filters.stage    && filters.stage    !== "ALL") where.clmStage     = filters.stage   as CLMStage;
+  if (filters.cohort   && filters.cohort   !== "ALL") where.clmCohort    = filters.cohort  as CLMCohort;
+  if (filters.size     && filters.size     !== "ALL") where.sizeCategory = filters.size;
+  if (filters.branchId && filters.branchId !== "ALL") where.branchId     = filters.branchId;
   // Фильтр по команде доступен только admin/analyst (менеджер и так ограничен своей командой)
   if ((session.role === "ADMIN" || session.role === "ANALYST") && filters.team && filters.team !== "ALL") {
     if (filters.team === "B2B" || filters.team === "KM") where.manager = { team: filters.team };
@@ -91,7 +93,7 @@ export async function getClient(id: string) {
       tasks: {
         where: { status: { not: "DONE" } },
         orderBy: { dueDate: "asc" },
-        take: 5,
+        take: 20, // достаточно для NBA-дедупликации (6–8 event-trigger + до 6 шагов sequence)
       },
       changelogs: {
         orderBy: { changedAt: "desc" },
@@ -106,7 +108,7 @@ export async function getClient(id: string) {
   });
 
   if (!client) return null;
-  if (!canViewClient(session, client)) return null; // нет доступа = 404
+  // Все авторизованные пользователи видят карточку клиента (чувствительные поля маскируются)
 
   return client;
 }

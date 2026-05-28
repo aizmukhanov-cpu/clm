@@ -17,7 +17,11 @@ export async function getDeals(team: "B2B" | "KM" | "BRANCH", filters: PipelineF
 
   const where: Record<string, unknown> = { team, status: DealStatus.ACTIVE };
 
-  if (session.role === UserRole.MANAGER) where.ownerId = session.id;
+  // SPECIALIST видит только свои сделки; SUPERVISOR/TEAM_LEAD/выше — все в команде
+  if (session.role === "SPECIALIST") where.ownerId = session.id;
+  if (session.role === "SUPERVISOR") {
+    where.owner = { OR: [{ id: session.id }, { supervisorId: session.id }] };
+  }
   if (filters.ownerId && filters.ownerId !== "ALL") where.ownerId = filters.ownerId;
 
   const deals = await db.deal.findMany({
@@ -29,34 +33,28 @@ export async function getDeals(team: "B2B" | "KM" | "BRANCH", filters: PipelineF
     orderBy: { updatedAt: "desc" },
   });
 
-  const owners =
-    session.role === UserRole.MANAGER
-      ? []
-      : await db.user.findMany({
-          where: {
-            role: { in: [UserRole.MANAGER] },
-            team: team as "B2B" | "KM" | "BRANCH",
-          },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        });
+  const isPersonal = session.role === "SPECIALIST";
+  const owners = isPersonal
+    ? []
+    : await db.user.findMany({
+        where: {
+          role: { in: ["SPECIALIST", "SUPERVISOR", "TEAM_LEAD"] },
+          team: team as "B2B" | "KM" | "BRANCH",
+        },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      });
 
   // Summary stats by stage
+  const ownerScope = session.role === "SPECIALIST" ? { ownerId: session.id } : {};
+
   const allActive = await db.deal.findMany({
-    where: {
-      team,
-      status: DealStatus.ACTIVE,
-      ...(session.role === UserRole.MANAGER ? { ownerId: session.id } : {}),
-    },
+    where: { team, status: DealStatus.ACTIVE, ...ownerScope },
     select: { stage: true, amount: true },
   });
 
   const wonCount = await db.deal.count({
-    where: {
-      team,
-      status: DealStatus.WON,
-      ...(session.role === UserRole.MANAGER ? { ownerId: session.id } : {}),
-    },
+    where: { team, status: DealStatus.WON, ...ownerScope },
   });
 
   // Stage list by team

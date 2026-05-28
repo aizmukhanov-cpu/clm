@@ -1,51 +1,115 @@
 /**
  * Централизованная логика доступа на основе роли и команды.
  *
- * Модель доступа:
- *   clientAccessWhere  → ALL authenticated users see ALL clients
- *                        (sensitive columns masked via PermissionConfig)
- *
- *   teamWorkFilter     → team-scoped access for WORK QUEUES
- *                        (Activation Desk, Reactivation working view)
- *                        ADMIN / ANALYST → всё
- *                        MANAGER (B2B/KM) → только клиенты своей команды
- *                        KAM_ROLE → только свои клиенты (kam.id = session.id)
- *
- *   canEdit  → только ADMIN и ANALYST могут менять стадию / архивировать
+ * ┌─────────────┬──────────────────────────────────────────────────────┐
+ * │ Роль        │ Область видимости клиентов                           │
+ * ├─────────────┼──────────────────────────────────────────────────────┤
+ * │ ADMIN       │ Все клиенты, полный доступ + admin-панель            │
+ * │ DIRECTOR    │ Все клиенты, read-only + KPI                         │
+ * │ ANALYST     │ Все клиенты, read-only аналитика                     │
+ * │ TEAM_LEAD   │ Все клиенты своей команды (team)                     │
+ * │ SUPERVISOR  │ Свои клиенты + клиенты своих подчинённых             │
+ * │ SPECIALIST  │ Только свои клиенты (managerId = session.id)         │
+ * │ KAM         │ Только свои KAM-клиенты (kamId = session.id)         │
+ * └─────────────┴──────────────────────────────────────────────────────┘
  */
 
 import { SessionUser } from "@/lib/auth";
 
 export type ClientWhereFilter = Record<string, unknown>;
 
-/** Для реестра клиентов и карточки клиента — все видят всех */
-export function clientAccessWhere(_session: SessionUser): ClientWhereFilter {
-  return {};
+/** Роли с глобальным доступом */
+const GLOBAL_ROLES = ["ADMIN", "DIRECTOR", "ANALYST"];
+
+/** True — роль видит всех клиентов */
+export function hasGlobalAccess(session: SessionUser): boolean {
+  return GLOBAL_ROLES.includes(session.role);
 }
 
-/** Для рабочих очередей (Activation Desk) — командная фильтрация */
+/**
+ * Фильтр для рабочих очередей и портфельных страниц.
+ * Использовать там, где нужно ограничить видимость по роли.
+ */
 export function teamWorkFilter(session: SessionUser): ClientWhereFilter {
-  if (session.role === "ADMIN" || session.role === "ANALYST") {
-    return {};
-  }
-  if (session.role === "KAM_ROLE") {
-    return { kamId: session.id };
-  }
-  if (session.role === "MANAGER") {
+  if (hasGlobalAccess(session)) return {};
+
+  if (session.role === "TEAM_LEAD") {
+    // Вся команда по полю team менеджера или KAM-связи
+    if (session.team === "KAM") {
+      return { kam: { team: "KAM" } };
+    }
     return { manager: { team: session.team } };
   }
+
+  if (session.role === "SUPERVISOR") {
+    // Собственные клиенты + клиенты подчинённых
+    if (session.team === "KAM") {
+      return {
+        OR: [
+          { kamId: session.id },
+          { kam: { supervisorId: session.id } },
+        ],
+      };
+    }
+    return {
+      OR: [
+        { managerId: session.id },
+        { manager: { supervisorId: session.id } },
+      ],
+    };
+  }
+
+  if (session.role === "KAM") {
+    return { kamId: session.id };
+  }
+
+  if (session.role === "SPECIALIST") {
+    return { managerId: session.id };
+  }
+
+  // Fallback — ничего не показывать
   return { id: "__none__" };
 }
 
-/** Может ли пользователь видеть/редактировать клиента — теперь все могут смотреть */
-export function canViewClient(
-  _session: SessionUser,
-  _client: { managerId: string | null; kamId: string | null; manager?: { team: string } | null },
-): boolean {
-  return true; // Все аутентифицированные пользователи видят всех клиентов
+/**
+ * Фильтр для задач в Activation Desk и других рабочих очередях.
+ * Возвращает фрагмент where для модели Task.
+ */
+export function taskScopeFilter(session: SessionUser): Record<string, unknown> {
+  if (hasGlobalAccess(session)) return {};
+
+  if (session.role === "TEAM_LEAD") {
+    // Задачи любого члена команды
+    return { user: { team: session.team } };
+  }
+
+  if (session.role === "SUPERVISOR") {
+    // Задачи своих подчинённых + свои
+    return {
+      user: {
+        OR: [
+          { id: session.id },
+          { supervisorId: session.id },
+        ],
+      },
+    };
+  }
+
+  // SPECIALIST / KAM — только свои
+  return { assignedTo: session.id };
+}
+
+/** Для реестра клиентов — все видят всех (чувствительные поля маскируются через PermissionConfig) */
+export function clientAccessWhere(_session: SessionUser): ClientWhereFilter {
+  return {};
 }
 
 /** Может ли пользователь менять стадию / архивировать */
 export function canEdit(session: SessionUser): boolean {
   return session.role === "ADMIN" || session.role === "ANALYST";
+}
+
+/** Может ли пользователь видеть полный реестр клиентов */
+export function canViewRegistry(session: SessionUser): boolean {
+  return ["ADMIN", "DIRECTOR", "ANALYST", "TEAM_LEAD"].includes(session.role);
 }

@@ -2,8 +2,8 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { UserRole, CLMStage } from "@/generated/prisma/client";
-import { teamWorkFilter } from "@/lib/access";
+import { CLMStage } from "@/generated/prisma/client";
+import { taskScopeFilter, hasGlobalAccess } from "@/lib/access";
 
 export type DeskFilters = {
   priority?:   string;
@@ -18,23 +18,23 @@ export async function getDeskTasks(filters: DeskFilters = {}) {
 
   const now = new Date();
 
-  // Client-level access filter: каждая команда видит только своих клиентов
+  // Client-level filter: только релевантные стадии
   const clientFilter: Record<string, unknown> = {
     isArchived: false,
     clmStage: { in: [CLMStage.ONBOARD, CLMStage.ACTIVATE] },
-    ...teamWorkFilter(session),
   };
 
   const where: Record<string, unknown> = {
     client: clientFilter,
+    // Ограничение по роли: кто видит чьи задачи
+    ...taskScopeFilter(session),
   };
 
   if (filters.priority   && filters.priority   !== "ALL") where.priority   = filters.priority;
   if (filters.triggerDay && filters.triggerDay !== "ALL") where.triggerDay = filters.triggerDay;
 
-  // Фильтр по исполнителю доступен только admin/analyst
-  if (filters.assignedTo && filters.assignedTo !== "ALL" &&
-      session.role !== UserRole.MANAGER && session.role !== UserRole.KAM_ROLE) {
+  // Фильтр по исполнителю — только для ролей с широким доступом
+  if (filters.assignedTo && filters.assignedTo !== "ALL" && hasGlobalAccess(session)) {
     where.assignedTo = filters.assignedTo;
   }
 
@@ -69,11 +69,12 @@ export async function getDeskTasks(filters: DeskFilters = {}) {
     take: 300,
   });
 
-  // Статистика только по открытым задачам (без фильтров пользователя)
+  // Статистика по открытым задачам (с учётом личного скоупа)
   const openTasks = await db.task.findMany({
     where: {
       status: { not: "DONE" },
       client: clientFilter,
+      ...taskScopeFilter(session),
     },
     select: { priority: true, dueDate: true },
   });
@@ -84,15 +85,14 @@ export async function getDeskTasks(filters: DeskFilters = {}) {
     p1:      openTasks.filter((t) => t.priority === "P1").length,
   };
 
-  // Список исполнителей для фильтра — только admin/analyst видит выбор
-  const assignees =
-    session.role === UserRole.MANAGER || session.role === UserRole.KAM_ROLE
-      ? []
-      : await db.user.findMany({
-          where: { role: { in: [UserRole.MANAGER, UserRole.KAM_ROLE] } },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        });
+  // Список исполнителей для фильтра — только глобальный доступ
+  const assignees = hasGlobalAccess(session)
+    ? await db.user.findMany({
+        where: { role: { in: ["SPECIALIST", "KAM", "SUPERVISOR", "TEAM_LEAD"] } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
 
   return { tasks, stats, assignees };
 }

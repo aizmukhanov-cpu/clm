@@ -5,6 +5,7 @@ import { STAGE_LABELS } from "@/lib/clm-config";
 import { CLMStage } from "@/generated/prisma/client";
 import { formatDistanceToNow, format } from "date-fns";
 import { ru } from "date-fns/locale";
+import type { SnapshotPoint } from "@/lib/actions/snapshots";
 
 /* ─── Helpers ─────────────────────────────────────────── */
 
@@ -42,6 +43,88 @@ const ACTIVITY_ICON: Record<string, string> = {
   CALL: "📞", MEETING: "🤝", EMAIL: "✉️",
 };
 
+/* ─── Trend components ────────────────────────────────── */
+
+/** SVG sparkline — suitable for server render (no client JS) */
+function Sparkline({
+  data,
+  color = "var(--mbank-green)",
+  width = 80,
+  height = 24,
+}: {
+  data: number[];
+  color?: string;
+  width?: number;
+  height?: number;
+}) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => [
+    Number(((i / (data.length - 1)) * width).toFixed(1)),
+    Number((height - ((v - min) / range) * (height - 2) - 1).toFixed(1)),
+  ]);
+  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0]} ${p[1]}`).join(" ");
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0 overflow-visible">
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Last point dot */}
+      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="2.5" fill={color} />
+    </svg>
+  );
+}
+
+/** Horizontal bar chart of weekly counts */
+function WeeklyBars({
+  data,
+  color = "var(--mbank-green)",
+  height = 48,
+}: {
+  data: { label: string; count: number }[];
+  color?: string;
+  height?: number;
+}) {
+  const max = Math.max(...data.map((d) => d.count), 1);
+  return (
+    <div className="flex items-end gap-1" style={{ height }}>
+      {data.map((d, i) => {
+        const isLast = i === data.length - 1;
+        const barH   = Math.max(Math.round((d.count / max) * (height - 16)), 2);
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-0.5">
+            <span className="text-[8px] tabular-nums" style={{ color: isLast ? color : "#9ca3af" }}>
+              {d.count > 0 ? d.count : ""}
+            </span>
+            <div
+              className="w-full rounded-sm transition-all"
+              style={{ height: barH, background: isLast ? color : (color === "var(--mbank-green)" ? "#bbf7d0" : "#fed7aa") }}
+            />
+            <span className="text-[8px] text-gray-300 truncate w-full text-center">{d.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Delta badge: +3% / −2% */
+function Delta({ value, unit = "%" }: { value: number | null; unit?: string }) {
+  if (value === null) return null;
+  const pos = value >= 0;
+  return (
+    <span
+      className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+      style={{
+        color:      pos ? "var(--mbank-green)" : "#dc2626",
+        background: pos ? "var(--mbank-green-pale)" : "#fef2f2",
+      }}
+    >
+      {pos ? "+" : ""}{value}{unit}
+    </span>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────── */
 
 export default async function DashboardPage() {
@@ -50,19 +133,29 @@ export default async function DashboardPage() {
 
   const {
     totalClients, stageFunnel, cohortMap,
-    tasks, pipeline, activitiesWeek, actTypeMap,
+    tasks, pipeline, activitiesWeek, activitiesWoWDelta, actTypeMap,
     recentActivities, recentChangelogs, activity,
     branchStats, productAdoption, topRiskClients,
+    snapshotHistory, weeklyActivityTrend, weeklyActivationsTrend,
   } = data;
 
   // Activation rate — доля клиентов с ≥1 тр. > 100 сом
   const activationRate = totalClients > 0
     ? Math.round((activity.active / totalClients) * 100)
     : 0;
-  // Клиенты с любой активностью (включая мелкие транзакции)
   const anyActive = activity.active + activity.lowActive;
 
-  const maxStage = Math.max(...stageFunnel.map((s) => s.count), 1);
+  // Activation rate from snapshots (for sparkline + delta)
+  const snapRates = snapshotHistory.map((s: SnapshotPoint) => s.activationRate);
+  const snapActivations = snapshotHistory.map((s: SnapshotPoint) => s.activitiesWeek);
+  const prevSnap = snapshotHistory.length >= 2 ? snapshotHistory[snapshotHistory.length - 2] : null;
+  const activationDelta = prevSnap
+    ? Math.round((activationRate - prevSnap.activationRate) * 10) / 10
+    : null;
+  const activeDelta = prevSnap ? activity.active - prevSnap.activeClients : null;
+  const atRiskDelta = prevSnap ? activity.atRisk - prevSnap.atRiskClients : null;
+
+  const maxStage  = Math.max(...stageFunnel.map((s) => s.count), 1);
   const maxCohort = Math.max(...cohortMap.map((c) => c.count), 1);
 
   return (
@@ -78,7 +171,10 @@ export default async function DashboardPage() {
         {/* Total clients + activation rate */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <div className="text-xs text-gray-400 mb-1">Клиентов в базе</div>
-          <div className="text-3xl font-bold text-gray-900">{totalClients.toLocaleString()}</div>
+          <div className="flex items-end gap-2">
+            <div className="text-3xl font-bold text-gray-900">{totalClients.toLocaleString()}</div>
+            {activeDelta !== null && <Delta value={activeDelta} unit=" акт." />}
+          </div>
           <div className="flex items-center gap-2 mt-2">
             <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
               <div
@@ -116,17 +212,27 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Activities this week */}
+        {/* Activities this week + WoW trend */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <div className="text-xs text-gray-400 mb-1">Активности (7 дней)</div>
-          <div className="text-3xl font-bold text-gray-900">{activitiesWeek}</div>
-          <div className="flex items-center gap-3 mt-2">
-            {["CALL", "MEETING", "EMAIL"].map((t) => (
-              <div key={t} className="flex items-center gap-1 text-xs text-gray-400">
-                <span>{ACTIVITY_ICON[t]}</span>
-                <span>{actTypeMap[t] ?? 0}</span>
+          <div className="text-xs text-gray-400 mb-1">Взаимодействия (7 дней)</div>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-end gap-2">
+                <div className="text-3xl font-bold text-gray-900">{activitiesWeek}</div>
+                <Delta value={activitiesWoWDelta} />
               </div>
-            ))}
+              <div className="flex items-center gap-3 mt-1.5">
+                {["CALL", "MEETING", "EMAIL"].map((t) => (
+                  <div key={t} className="flex items-center gap-1 text-xs text-gray-400">
+                    <span>{ACTIVITY_ICON[t]}</span>
+                    <span>{actTypeMap[t] ?? 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {weeklyActivityTrend.length >= 2 && (
+              <Sparkline data={weeklyActivityTrend.map((w: { count: number }) => w.count)} width={56} height={32} />
+            )}
           </div>
         </div>
 
@@ -152,18 +258,31 @@ export default async function DashboardPage() {
               Активным считается клиент с ≥1 транзакцией &gt; 100 сом за последние 30 дней
             </p>
           </div>
-          {/* Big rate */}
-          <div className="text-right">
-            <div
-              className="text-4xl font-bold tabular-nums"
-              style={{
-                color: activationRate >= 50 ? "var(--mbank-green)" :
-                       activationRate >= 30 ? "#d97706" : "#ef4444",
-              }}
-            >
-              {activationRate}%
+          {/* Big rate + sparkline */}
+          <div className="flex items-center gap-4">
+            {snapRates.length >= 2 && (
+              <div className="flex flex-col items-end gap-1">
+                <Sparkline data={snapRates} width={96} height={28} />
+                <span className="text-[9px] text-gray-400">
+                  {snapshotHistory.length} снимков · {format(snapshotHistory[0].date, "dd.MM")}–{format(snapshotHistory[snapshotHistory.length - 1].date, "dd.MM")}
+                </span>
+              </div>
+            )}
+            <div className="text-right">
+              <div
+                className="text-4xl font-bold tabular-nums"
+                style={{
+                  color: activationRate >= 50 ? "var(--mbank-green)" :
+                         activationRate >= 30 ? "#d97706" : "#ef4444",
+                }}
+              >
+                {activationRate}%
+              </div>
+              <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                <span className="text-xs text-gray-400">от базы активны</span>
+                {activationDelta !== null && <Delta value={activationDelta} unit="pp" />}
+              </div>
             </div>
-            <div className="text-xs text-gray-400 mt-0.5">от базы активны</div>
           </div>
         </div>
 
@@ -171,46 +290,26 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-5 gap-3 mb-5">
           {([
             {
-              label:   "Активные",
-              value:   activity.active,
-              sub:     "≥1 тр. > 100 сом",
-              color:   "var(--mbank-green)",
-              bg:      "var(--mbank-green-pale)",
-              ring:    "#86efac",
+              label: "Активные",  value: activity.active,      delta: activeDelta,
+              sub: "≥1 тр. > 100 сом", color: "var(--mbank-green)", bg: "var(--mbank-green-pale)", ring: "#86efac",
             },
             {
-              label:   "Мало транзачат",
-              value:   activity.lowActive,
-              sub:     "≥1 тр. ≤ 100 сом",
-              color:   "#d97706",
-              bg:      "#fffbeb",
-              ring:    "#fde68a",
+              label: "Мало транзачат", value: activity.lowActive, delta: null,
+              sub: "≥1 тр. ≤ 100 сом", color: "#d97706", bg: "#fffbeb", ring: "#fde68a",
             },
             {
-              label:   "Под риском",
-              value:   activity.atRisk,
-              sub:     "0 тр. за 30д, 1–60 дней",
-              color:   "#c2410c",
-              bg:      "#fff7ed",
-              ring:    "#fed7aa",
+              label: "Под риском",  value: activity.atRisk, delta: atRiskDelta !== null ? -atRiskDelta : null,
+              sub: "0 тр. за 30д, 1–60 дней", color: "#c2410c", bg: "#fff7ed", ring: "#fed7aa",
             },
             {
-              label:   "Отток",
-              value:   activity.lapsed,
-              sub:     ">60 дней без тр.",
-              color:   "#dc2626",
-              bg:      "#fef2f2",
-              ring:    "#fecaca",
+              label: "Отток",  value: activity.lapsed, delta: null,
+              sub: ">60 дней без тр.", color: "#dc2626", bg: "#fef2f2", ring: "#fecaca",
             },
             {
-              label:   "Не начали",
-              value:   activity.neverActive,
-              sub:     "Ни одной транзакции",
-              color:   "#6b7280",
-              bg:      "#f9fafb",
-              ring:    "#e5e7eb",
+              label: "Не начали",  value: activity.neverActive, delta: null,
+              sub: "Ни одной транзакции", color: "#6b7280", bg: "#f9fafb", ring: "#e5e7eb",
             },
-          ] as const).map(({ label, value, sub, color, bg, ring }) => {
+          ] as const).map(({ label, value, sub, color, bg, ring, delta }) => {
             const pct = totalClients > 0 ? Math.round((value / totalClients) * 100) : 0;
             return (
               <div
@@ -222,10 +321,13 @@ export default async function DashboardPage() {
                 <div className="text-2xl font-bold tabular-nums" style={{ color }}>
                   {value.toLocaleString("ru")}
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-1">
                   <span className="text-[10px] text-gray-400">{sub}</span>
                   <span className="text-xs font-semibold" style={{ color }}>{pct}%</span>
                 </div>
+                {delta !== null && (
+                  <Delta value={delta} unit=" vs пред." />
+                )}
               </div>
             );
           })}
@@ -271,6 +373,84 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Тренды ── */}
+      <div className="grid grid-cols-2 gap-5">
+
+        {/* Weekly activity trend */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">Взаимодействия по неделям</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Количество контактов с клиентами (8 недель)</p>
+            </div>
+            {activitiesWoWDelta !== null && (
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                WoW: <Delta value={activitiesWoWDelta} />
+              </div>
+            )}
+          </div>
+          <WeeklyBars data={weeklyActivityTrend} height={72} />
+        </div>
+
+        {/* Weekly activations trend */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">Активации по неделям</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Переводы в стадию ACTIVATE (8 недель)</p>
+            </div>
+          </div>
+          <WeeklyBars data={weeklyActivationsTrend} color="#d97706" height={72} />
+        </div>
+
+        {/* Activation rate trend from snapshots */}
+        {snapRates.length >= 3 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Процент активации — динамика</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  По данным CLM-снимков · {snapshotHistory.length} точек
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold" style={{ color: activationRate >= 50 ? "var(--mbank-green)" : "#d97706" }}>
+                  {activationRate}%
+                </div>
+                {activationDelta !== null && <Delta value={activationDelta} unit="pp" />}
+              </div>
+            </div>
+            {/* Larger sparkline chart */}
+            <div className="w-full">
+              <Sparkline data={snapRates} width={400} height={56} />
+            </div>
+            <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400">
+              <span>{format(snapshotHistory[0].date, "dd MMM", { locale: ru })}</span>
+              <span>Цель: 60%</span>
+              <span>{format(snapshotHistory[snapshotHistory.length - 1].date, "dd MMM", { locale: ru })}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Activity trend from snapshots */}
+        {snapActivations.length >= 3 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Активность команды — динамика</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Взаимодействий за 7 дней (исторически)</p>
+              </div>
+            </div>
+            <Sparkline data={snapActivations} color="#6366f1" width={400} height={56} />
+            <div className="flex items-center justify-between mt-2 text-[10px] text-gray-400">
+              <span>{format(snapshotHistory[0].date, "dd MMM", { locale: ru })}</span>
+              <span>{format(snapshotHistory[snapshotHistory.length - 1].date, "dd MMM", { locale: ru })}</span>
+            </div>
+          </div>
+        )}
+
       </div>
 
       <div className="grid grid-cols-3 gap-5">
@@ -414,14 +594,12 @@ export default async function DashboardPage() {
                 : { color: "#d97706", bg: "#fffbeb", label: "Средний" };
               return (
                 <div key={c.id} className="flex items-center gap-4 py-3">
-                  {/* Urgency badge */}
                   <span
                     className="text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0"
                     style={{ color: urgency.color, background: urgency.bg }}
                   >
                     {urgency.label}
                   </span>
-                  {/* Name + INN */}
                   <div className="flex-1 min-w-0">
                     <Link
                       href={`/clients/${c.id}`}
@@ -431,25 +609,21 @@ export default async function DashboardPage() {
                     </Link>
                     <span className="text-xs text-gray-400">{c.inn}</span>
                   </div>
-                  {/* Stage */}
                   <span className="text-xs text-gray-500 shrink-0 hidden sm:block">
                     {STAGE_LABELS[c.clmStage as CLMStage] ?? c.clmStage}
                   </span>
-                  {/* Days without txn */}
                   <div className="text-right shrink-0">
                     <div className="text-sm font-bold tabular-nums" style={{ color: urgency.color }}>
                       {c.daysSinceLastTxn}д
                     </div>
                     <div className="text-[10px] text-gray-400">без тр.</div>
                   </div>
-                  {/* GMV */}
                   <div className="text-right shrink-0 hidden md:block">
                     <div className="text-xs font-medium text-gray-600 tabular-nums">
                       {fmtAmount(c.gmv30d ?? 0)}
                     </div>
                     <div className="text-[10px] text-gray-400">GMV 30д</div>
                   </div>
-                  {/* Manager */}
                   {c.manager && (
                     <span className="text-xs text-gray-400 shrink-0 hidden lg:block max-w-[100px] truncate">
                       {c.manager.name}
@@ -493,7 +667,6 @@ export default async function DashboardPage() {
                   </div>
                 </div>
                 <div className="relative h-2.5 rounded-full bg-gray-100 overflow-visible">
-                  {/* Actual bar */}
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
@@ -503,7 +676,6 @@ export default async function DashboardPage() {
                                 : "#ef4444",
                     }}
                   />
-                  {/* Target marker */}
                   <div
                     className="absolute top-0 h-full w-0.5 bg-gray-400 rounded-full"
                     style={{ left: `${b.targetPct}%` }}
@@ -564,7 +736,7 @@ export default async function DashboardPage() {
       {/* ── Activity Feed ── */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-gray-700">Последние контакты</h3>
+          <h3 className="text-sm font-semibold text-gray-700">Последние взаимодействия</h3>
         </div>
         {recentActivities.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">Нет активностей</p>

@@ -5,14 +5,15 @@
  * Uses the SAME rules as the manual admin sync (calcCohort / calcStageTransition
  * from clm-rules.ts) so behaviour is always consistent.
  *
- * The admin page (/admin/clm-rules) runs runCLMSync() which requires an
- * authenticated ADMIN session. This function is the session-less equivalent
- * for cron use.
+ * Additionally:
+ *  - Computes and stores sizeCategory (SMALL/MEDIUM/LARGE) from gmv30d × 12
+ *  - Sets activatedAt on the first transition into ACTIVATE stage
+ *    (and backfills it for existing ACTIVATE/GROW clients with no activatedAt)
  */
 
 import { db } from "@/lib/db";
-import { calcCohort, calcStageTransition } from "@/lib/clm-rules";
-import type { CohortKey, StageKey } from "@/lib/clm-rules";
+import { calcCohort, calcStageTransition, calcSizeCategory } from "@/lib/clm-rules";
+import type { CohortKey, StageKey, SizeCategoryKey } from "@/lib/clm-rules";
 
 export type RFMResult = {
   updated:     number;
@@ -24,7 +25,6 @@ export async function runRFMSync(): Promise<RFMResult> {
   const result: RFMResult = { updated: 0, stageShifts: 0, errors: [] };
 
   // Resolve a system user for changelog attribution
-  // (looks for "clm-automation" user, falls back to first ADMIN)
   const systemUser = await db.user.findFirst({
     where: { email: "clm-automation" },
     select: { id: true },
@@ -45,8 +45,12 @@ export async function runRFMSync(): Promise<RFMResult> {
       daysSinceLastTxn: true,
       txnCount30d:      true,
       gmv30d:           true,
+      sizeCategory:     true,
+      activatedAt:      true,
     },
   });
+
+  const now = new Date();
 
   for (const c of clients) {
     try {
@@ -58,17 +62,31 @@ export async function runRFMSync(): Promise<RFMResult> {
         daysSinceLastTxn: c.daysSinceLastTxn,
       };
 
-      const newCohort = calcCohort(snapshot);
-      const newStage  = calcStageTransition(snapshot); // null = no change
+      const newCohort       = calcCohort(snapshot);
+      const newStage        = calcStageTransition(snapshot); // null = no change
+      const newSizeCategory = calcSizeCategory(c.gmv30d) as SizeCategoryKey;
 
       const cohortChanged = newCohort !== c.clmCohort;
       const stageChanged  = newStage !== null && newStage !== c.clmStage;
+      const sizeChanged   = newSizeCategory !== c.sizeCategory;
 
-      if (!cohortChanged && !stageChanged) continue;
+      // Set activatedAt when:
+      //  a) client is transitioning into ACTIVATE now for the first time, OR
+      //  b) client is already in ACTIVATE/GROW but activatedAt was never set (backfill)
+      const enteringActivate = stageChanged && newStage === "ACTIVATE";
+      const alreadyActiveNoDate =
+        !stageChanged &&
+        (c.clmStage === "ACTIVATE" || c.clmStage === "GROW") &&
+        c.activatedAt === null;
+      const setActivatedAt = (enteringActivate || alreadyActiveNoDate) && c.activatedAt === null;
 
-      const data: Record<string, string> = {};
-      if (cohortChanged) data.clmCohort = newCohort;
-      if (stageChanged)  data.clmStage  = newStage!;
+      if (!cohortChanged && !stageChanged && !sizeChanged && !setActivatedAt) continue;
+
+      const data: Record<string, unknown> = {};
+      if (cohortChanged)  data.clmCohort    = newCohort;
+      if (stageChanged)   data.clmStage     = newStage!;
+      if (sizeChanged)    data.sizeCategory = newSizeCategory;
+      if (setActivatedAt) data.activatedAt  = now;
 
       await db.client.update({ where: { id: c.id }, data: data as never });
 

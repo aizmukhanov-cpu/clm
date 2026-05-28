@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { UserRole, TeamType } from "@/generated/prisma/client";
+import { getSnapshotHistory } from "@/lib/actions/snapshots";
 
 /* ─── Типы ─────────────────────────────────────────────── */
 
@@ -33,10 +34,16 @@ export type TeamKPI = {
   managers:       ManagerKPI[];
 };
 
+export type ActivationTrendPoint = {
+  date:           Date;
+  activationRate: number;
+  activeClients:  number;
+};
+
 export type KPIViewMode =
-  | { kind: "all";      teams: TeamKPI[] }
-  | { kind: "team";     team: TeamKPI }
-  | { kind: "personal"; kpi: ManagerKPI };
+  | { kind: "all";      teams: TeamKPI[]; trend: ActivationTrendPoint[] }
+  | { kind: "team";     team: TeamKPI;   trend: ActivationTrendPoint[] }
+  | { kind: "personal"; kpi: ManagerKPI; trend: ActivationTrendPoint[] };
 
 const TEAM_LABELS: Record<string, string> = {
   B2B:    "B2B — Микро / ИП",
@@ -113,21 +120,36 @@ export async function getKPIData(): Promise<KPIViewMode | null> {
   const prevStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
-  // ── MANAGER / KAM_ROLE → только личный KPI ────────────
-  if (session.role === UserRole.MANAGER || session.role === UserRole.KAM_ROLE) {
+  const [trend] = await Promise.all([
+    getSnapshotHistory(12).then((pts) =>
+      pts.map((p) => ({ date: p.date, activationRate: p.activationRate, activeClients: p.activeClients }))
+    ),
+  ]);
+
+  // ── SPECIALIST / KAM → только личный KPI ─────────────
+  if (session.role === "SPECIALIST" || session.role === "KAM") {
     const me = { id: session.id, name: session.name, team: session.team ?? "KM" };
     const kpi = await calcManagerKPI(me, now, monthStart, prevStart, prevEnd);
-    return { kind: "personal", kpi };
+    return { kind: "personal", kpi, trend };
   }
 
+  // ── SUPERVISOR → свои + подчинённые (personal view) ──
+  if (session.role === "SUPERVISOR") {
+    const me = { id: session.id, name: session.name, team: session.team ?? "KM" };
+    const kpi = await calcManagerKPI(me, now, monthStart, prevStart, prevEnd);
+    return { kind: "personal", kpi, trend };
+  }
+
+  // ── TEAM_LEAD → только своя команда ──────────────────
+  // ── DIRECTOR / ADMIN → все команды ───────────────────
   // ── ANALYST → только своя команда ────────────────────
-  // ── ADMIN → все команды ──────────────────────────────
-  const teamFilter = session.role === UserRole.ANALYST
+  const teamScopedRoles = ["TEAM_LEAD", "ANALYST"];
+  const teamFilter = teamScopedRoles.includes(session.role)
     ? { team: session.team as TeamType }
     : {};
 
   const managers = await db.user.findMany({
-    where: { role: { in: [UserRole.MANAGER, UserRole.KAM_ROLE] }, ...teamFilter },
+    where: { role: { in: ["SPECIALIST", "KAM", "SUPERVISOR"] }, ...teamFilter },
     select: { id: true, name: true, team: true },
     orderBy: [{ team: "asc" }, { name: "asc" }],
   });
@@ -149,7 +171,7 @@ export async function getKPIData(): Promise<KPIViewMode | null> {
 
   for (const team of teamOrder) {
     const mgrs = teamMap[team] ?? [];
-    if (mgrs.length === 0 && session.role !== UserRole.ADMIN) continue;
+    if (mgrs.length === 0 && session.role !== "ADMIN") continue;
 
     const sum = mgrs.reduce(
       (acc, m) => ({
@@ -177,18 +199,18 @@ export async function getKPIData(): Promise<KPIViewMode | null> {
     });
   }
 
-  if (session.role === UserRole.ANALYST && teams.length === 1) {
-    return { kind: "team", team: teams[0] };
+  if ((session.role === "ANALYST" || session.role === "TEAM_LEAD") && teams.length === 1) {
+    return { kind: "team", team: teams[0], trend };
   }
 
-  return { kind: "all", teams };
+  return { kind: "all", teams, trend };
 }
 
 // Совместимость со старой страницей admin/kpi
 export async function getKPIDashboard() {
   const session = await getSession();
   if (!session) return null;
-  if (session.role !== UserRole.ADMIN && session.role !== "ANALYST") return null;
+  if (!["ADMIN", "ANALYST", "DIRECTOR"].includes(session.role)) return null;
 
   const now        = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -196,7 +218,7 @@ export async function getKPIDashboard() {
   const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
   const managers = await db.user.findMany({
-    where: { role: UserRole.MANAGER },
+    where: { role: { in: ["SPECIALIST", "KAM"] } },
     select: { id: true, name: true, team: true },
     orderBy: [{ team: "asc" }, { name: "asc" }],
   });

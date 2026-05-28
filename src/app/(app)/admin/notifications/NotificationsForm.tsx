@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { escalateOverdueTasks } from "@/lib/actions/tasks";
-import { triggerRFMSync, triggerEventTriggers } from "@/lib/actions/admin-triggers";
+import { triggerRFMSync, triggerEventTriggers, triggerHunterHandoff } from "@/lib/actions/admin-triggers";
 
 type Config = {
   telegramConfigured: boolean;
@@ -62,6 +62,10 @@ export function NotificationsForm({ config }: { config: Config }) {
   const [evtState, setEvtState] = useState<TriggerState>("idle");
   const [evtResult, setEvtResult] = useState<string | null>(null);
 
+  // Hunter handoff
+  const [handoffState, setHandoffState] = useState<TriggerState>("idle");
+  const [handoffResult, setHandoffResult] = useState<string | null>(null);
+
   async function handleEscalate() {
     setEscState("loading"); setEscResult(null);
     const res = await escalateOverdueTasks();
@@ -81,6 +85,21 @@ export function NotificationsForm({ config }: { config: Config }) {
     const res = await triggerEventTriggers();
     if ("error" in res && res.error) { setEvtResult(`❌ ${res.error}`); setEvtState("error"); }
     else { setEvtResult(`✅ Задач создано: ${res.tasksCreated}`); setEvtState("done"); }
+  }
+
+  async function handleHunterHandoff() {
+    setHandoffState("loading"); setHandoffResult(null);
+    const res = await triggerHunterHandoff();
+    if ("error" in res && res.error) { setHandoffResult(`❌ ${res.error}`); setHandoffState("error"); }
+    else {
+      const msg = res.transferred > 0
+        ? `✅ Передано: ${res.transferred}${res.skipped > 0 ? `, пропущено (нет фермера): ${res.skipped}` : ""}`
+        : res.skipped > 0
+          ? `⚠️ Нет клиентов для передачи (или нет фермеров): пропущено ${res.skipped}`
+          : "✅ Нет клиентов, ожидающих передачи";
+      setHandoffResult(msg);
+      setHandoffState("done");
+    }
   }
 
   return (
@@ -172,6 +191,15 @@ TELEGRAM_CHAT_ID=-1001234567890`
               state={evtState}
             />
           </div>
+          <div className="pt-4">
+            <TriggerButton
+              label="Hunter Handoff — передача фермерам"
+              description="Передаёт клиентов, активных 60+ дней, от охотников (B2B/KM) к фермерам: SMALL → BRANCH, MEDIUM → VB, LARGE → KAM."
+              onRun={handleHunterHandoff}
+              result={handoffResult}
+              state={handoffState}
+            />
+          </div>
         </div>
       </div>
 
@@ -180,8 +208,9 @@ TELEGRAM_CHAT_ID=-1001234567890`
         <p className="font-semibold">Автоматизация через cron (ночной запуск)</p>
         <p>Настройте ежедневный вызов всех трёх endpoint'ов с заголовком <code className="font-mono bg-amber-100 px-1 rounded">Authorization: Bearer $CRON_SECRET</code>:</p>
         <pre className="bg-amber-100 rounded p-2 text-[11px] font-mono mt-1 overflow-x-auto">{
-`POST /api/cron/rfm-sync          — 03:00 ежедневно (когорты и стадии)
+`POST /api/cron/rfm-sync          — 03:00 ежедневно (когорты, стадии, sizeCategory)
 POST /api/cron/event-triggers    — 03:05 ежедневно (автозадачи)
+POST /api/cron/handoff           — 03:10 ежедневно (передача B2B/KM → BRANCH/VB/KAM)
 POST /api/cron/escalate          — 08:00 ежедневно (просроченные задачи)
 POST /api/cron/reminders         — 09:00 ежедневно (напоминания на завтра)`
         }</pre>

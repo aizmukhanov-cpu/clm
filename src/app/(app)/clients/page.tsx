@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { getClients, getBranches } from "@/lib/actions/clients";
 import { getSession } from "@/lib/auth";
 import { getPermissionsForRole } from "@/lib/permissions";
@@ -10,6 +11,12 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
   const sp = await searchParams;
   const session = await getSession();
 
+  // Специалисты и супервайзеры работают через "Мой портфель" — блокируем прямой переход
+  const restrictedRoles = ["SPECIALIST", "KAM", "SUPERVISOR"];
+  if (session?.role && restrictedRoles.includes(session.role)) {
+    redirect("/my-portfolio");
+  }
+
   const showArchived = sp.archived === "1";
 
   const [{ clients, total, pages }, branches, perms] = await Promise.all([
@@ -17,6 +24,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Sear
       search:   sp.search,
       stage:    sp.stage,
       cohort:   sp.cohort,
+      size:     sp.size,
       branchId: sp.branch,
       team:     sp.team,
       page:     sp.page ? Number(sp.page) : 1,

@@ -5,12 +5,10 @@ export default async function RootPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  // MANAGER и KAM_ROLE → персональный портфель
-  // ADMIN и ANALYST   → общий дашборд
-  const home =
-    session.role === "MANAGER" || session.role === "KAM_ROLE"
-      ? "/my-portfolio"
-      : "/dashboard";
+  // Специалисты и супервайзеры → персональный портфель
+  // Руководители и выше → дашборд
+  const personalRoles = ["SPECIALIST", "KAM", "SUPERVISOR"];
+  const home = personalRoles.includes(session.role) ? "/my-portfolio" : "/dashboard";
 
   redirect(home);
 }

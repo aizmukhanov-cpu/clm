@@ -26,12 +26,12 @@ export default async function EditClientPage({ params }: { params: Params }) {
     }),
     db.branch.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.user.findMany({
-      where: { role: UserRole.MANAGER },
+      where: { role: { in: ["SPECIALIST", "SUPERVISOR", "TEAM_LEAD"] } },
       select: { id: true, name: true, team: true },
       orderBy: { name: "asc" },
     }),
     db.user.findMany({
-      where: { role: UserRole.KAM_ROLE },
+      where: { role: "KAM" },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

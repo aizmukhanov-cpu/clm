@@ -36,6 +36,12 @@ type ClientSignals = {
   openTasksCount:   number;
   lastActivityDays: number | null; // дней с последней активности менеджера
   isKAMClient:      boolean;
+  /**
+   * triggerDay значения активных (PENDING/OVERDUE) задач клиента.
+   * NBA не показывает рекомендацию, если задача по тому же триггеру уже существует.
+   * Пример: ["reactivation-60d", "cross-sell-acquiring", "seq:onboarding:d0"]
+   */
+  activeTriggers:   string[];
 };
 
 const PRODUCT_COUNT = 10;
@@ -48,11 +54,25 @@ function productsActive(c: ClientSignals): number {
   ].filter(Boolean).length;
 }
 
-/** Returns sorted recommendations (P1 first) */
+/**
+ * Проверяет, есть ли уже активная задача для данного триггера.
+ * Также учитывает активные последовательности (triggerDay начинается с "seq:{seqId}:").
+ *
+ * Используется ТОЛЬКО для P2/P3 рекомендаций — снижение шума когда задача уже в работе.
+ * P1 рекомендации (срочные) намеренно НЕ подавляются: менеджер обязан видеть
+ * критическое состояние клиента независимо от наличия задач в списке.
+ */
+function hasTask(activeTriggers: string[], ...keys: string[]): boolean {
+  return keys.some(k => activeTriggers.some(t => t === k || t.startsWith(`seq:${k}:`)));
+}
+
+/** Returns sorted recommendations (P1 first), suppressed if task already exists */
 export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   const recs: NBARecommendation[] = [];
+  const at = c.activeTriggers;
 
   // ── ОНБОРДИНГ ────────────────────────────────────────────
+  // P1 — не подавляется задачами: менеджер должен видеть проблему
   if (c.clmStage === "ONBOARD" && c.txnCount30d === 0 && c.daysSinceLastTxn > 7) {
     recs.push({
       priority: "P1",
@@ -65,16 +85,24 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   }
 
   // ── РЕАКТИВАЦИЯ ───────────────────────────────────────────
-  if (c.daysSinceLastTxn >= 60 && c.clmStage !== "ACQUIRE") {
+  // P1 — ВСЕГДА показывается при REACTIVATE или 60+ дней без транзакций.
+  // Наличие задачи не снимает тревогу — менеджер должен видеть состояние клиента.
+  if (c.clmStage === "REACTIVATE" || (c.daysSinceLastTxn >= 60 && c.clmStage !== "ACQUIRE")) {
     recs.push({
       priority: "P1",
       icon: "🔴",
       title: "Срочная реактивация",
-      reason: `${c.daysSinceLastTxn} дней без транзакций — высокий риск оттока`,
+      reason: c.clmStage === "REACTIVATE"
+        ? `Клиент в стадии реактивации — ${c.daysSinceLastTxn} дней без транзакций`
+        : `${c.daysSinceLastTxn} дней без транзакций — высокий риск оттока`,
       action: "Звонок + встреча. Выяснить причину, предложить условия возврата",
       tag: "reactivation",
     });
-  } else if (c.daysSinceLastTxn >= 30 && c.clmStage === "GROW") {
+  } else if (
+    c.daysSinceLastTxn >= 30 &&
+    c.clmStage === "GROW" &&
+    !hasTask(at, "reactivation-30d", "reactivation") // P2 — подавляется если задача есть
+  ) {
     recs.push({
       priority: "P2",
       icon: "⚠️",
@@ -90,7 +118,11 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
     const active = productsActive(c);
     const depth  = active / PRODUCT_COUNT;
 
-    if (!c.hasAcquiring && !c.hasMKassaPos && !c.hasMKassaQr && c.gmv30d > 100_000) {
+    if (
+      !c.hasAcquiring && !c.hasMKassaPos && !c.hasMKassaQr &&
+      c.gmv30d > 100_000 &&
+      !hasTask(at, "cross-sell-acquiring")
+    ) {
       recs.push({
         priority: "P2",
         icon: "💳",
@@ -101,7 +133,11 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
       });
     }
 
-    if (!c.hasSalaryProject && !c.hasPayroll && c.gmv30d > 200_000) {
+    if (
+      !c.hasSalaryProject && !c.hasPayroll &&
+      c.gmv30d > 200_000 &&
+      !hasTask(at, "cross-sell-salary", "salary-project")
+    ) {
       recs.push({
         priority: "P2",
         icon: "👥",
@@ -112,7 +148,11 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
       });
     }
 
-    if (!c.hasMBusiness && c.clmCohort === "ACTIVE") {
+    if (
+      !c.hasMBusiness &&
+      c.clmCohort === "ACTIVE" &&
+      !hasTask(at, "cross-sell-mbusiness")
+    ) {
       recs.push({
         priority: "P2",
         icon: "📱",
@@ -147,6 +187,7 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   }
 
   // ── ACCOUNT REVIEW (для KAM-клиентов) ────────────────────
+  // P1 — не подавляется: KAM обязан знать о просроченном review
   if (c.isKAMClient && c.lastActivityDays !== null && c.lastActivityDays > 60) {
     recs.push({
       priority: "P1",
@@ -156,7 +197,11 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
       action: "Запланировать встречу. Обновить Account Plan",
       tag: "review",
     });
-  } else if (c.isKAMClient && (c.lastActivityDays === null || c.lastActivityDays > 30)) {
+  } else if (
+    c.isKAMClient &&
+    (c.lastActivityDays === null || c.lastActivityDays > 30) &&
+    !hasTask(at, "grow-account-plan", "account-plan-grow") // P2 — подавляется если задача есть
+  ) {
     recs.push({
       priority: "P2",
       icon: "📅",
@@ -171,7 +216,8 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   if (
     c.lastActivityDays !== null &&
     c.lastActivityDays > 30 &&
-    c.clmStage !== "ACQUIRE"
+    c.clmStage !== "ACQUIRE" &&
+    !hasTask(at, "no-touch-30d")
   ) {
     recs.push({
       priority: "P3",

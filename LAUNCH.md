@@ -1,16 +1,21 @@
-# Инструкция по запуску CLM MVP
+# Запуск CLM MVP
+
+Пошаговая инструкция для новой команды.
+
+---
 
 ## Требования
 
-- Node.js >= 20
-- PostgreSQL 15+ (или Supabase)
+- Node.js ≥ 20
+- PostgreSQL 15+ (или Supabase — рекомендуется)
 - PgBouncer (опционально, рекомендуется для production)
 
 ---
 
-## 1. Установка зависимостей
+## 1. Клонирование
 
 ```bash
+git clone <repo-url> clm-mvp
 cd clm-mvp
 npm install
 ```
@@ -19,40 +24,33 @@ npm install
 
 ## 2. Переменные окружения
 
-Создайте файл `.env.local` в корне проекта:
+Создайте `.env.local` в корне проекта:
 
 ```env
 # ── База данных ────────────────────────────────────────────
 # Подключение через PgBouncer (transaction pooler, порт 6543)
-DATABASE_URL=postgres://user:password@host:6543/dbname?pgbouncer=true&connection_limit=1
+DATABASE_URL=postgresql://user:password@host:6543/dbname?pgbouncer=true
 
-# Прямое подключение для Prisma migrations (порт 5432)
-DIRECT_URL=postgres://user:password@host:5432/dbname
+# Прямое подключение для Prisma (migrations + generate, порт 5432)
+DIRECT_URL=postgresql://user:password@host:5432/dbname
 
 # ── Auth ──────────────────────────────────────────────────
-# Секрет для Iron Session (минимум 32 символа)
+# Секрет для Iron Session — минимум 32 символа, любая случайная строка
 JWT_SECRET=your-super-secret-min-32-chars-here
 
-# ── Telegram Bot (опционально) ────────────────────────────
-# Создать бота через @BotFather
-TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrSTUvwxyz
-
-# ID чата администратора (для тестирования)
-TELEGRAM_CHAT_ID=123456789
-
 # ── Cron защита ───────────────────────────────────────────
-# Любая случайная строка, используется как Bearer token
+# Bearer token для /api/cron/* эндпоинтов
 CRON_SECRET=your-cron-secret-string
 
-# ── Supabase (если используется Supabase вместо прямого PG) ─
-NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+# ── Telegram Bot (опционально) ────────────────────────────
+TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrSTUvwxyz
+TELEGRAM_CHAT_ID=123456789
 
-# ── Webhook уведомления (опционально) ─────────────────────
+# ── Webhook (опционально) ─────────────────────────────────
 NOTIFICATION_WEBHOOK_URL=https://your-webhook-url.com/notify
 ```
 
-> **Важно**: Если используется PgBouncer в режиме transaction pooling, Prisma migrations запускать только через `DIRECT_URL`. Иначе команды `BEGIN`/`COMMIT` вызовут ошибки.
+> **PgBouncer**: `DATABASE_URL` — порт 6543 (transaction pooler). `DIRECT_URL` — порт 5432 (прямое PG, нужно для migrate и generate). Если используете Supabase — оба URL есть в Settings → Database.
 
 ---
 
@@ -61,22 +59,25 @@ NOTIFICATION_WEBHOOK_URL=https://your-webhook-url.com/notify
 ### Новая установка
 
 ```bash
-# Применить все migrations
-DATABASE_URL=$DIRECT_URL npx prisma migrate deploy
+# 1. Применить все миграции
+npm run db:migrate
 
-# Сгенерировать Prisma client
-npx prisma generate
+# 2. Сгенерировать Prisma-клиент
+npm run db:generate
 
-# Заполнить базу тестовыми данными (3 филиала, ~15 клиентов, KPI-цели)
+# 3. Заполнить тестовыми данными
 npm run db:seed
 ```
 
-### Добавление системного пользователя для cron
+Seed создаёт: 3 филиала, 6 пользователей, ~15 клиентов, каталог продуктов, плановые показатели.
+
+### Системный пользователь для cron (обязательно)
+
+Выполните в psql / Supabase SQL Editor:
 
 ```sql
--- Выполнить в psql или Supabase SQL Editor
 INSERT INTO users (id, name, email, role, team, branch_id, password_hash)
-SELECT 
+SELECT
   gen_random_uuid()::text,
   'CLM Automation',
   'clm-automation',
@@ -87,150 +88,103 @@ SELECT
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'clm-automation');
 ```
 
-> Этот пользователь используется в changelog-записях при автоматическом RFM-D sync. Без него изменения стадий не будут записаны в историю.
+Этот пользователь фигурирует в changelog-записях при автоматическом RFM-D sync.
 
 ---
 
-## 4. Запуск dev-сервера
+## 4. Запуск
 
 ```bash
+# Dev (с Turbopack)
 npm run dev
+
+# Production build + start
+npm run build
+npm start
 ```
 
-Приложение доступно на [http://localhost:3000](http://localhost:3000)
-
-> Используется Turbopack с отключённым persistent caching (`TURBOPACK_DISABLE_PERSISTENT_CACHING=1`) для предотвращения stale-состояний при разработке.
+Приложение: [http://localhost:3000](http://localhost:3000)
 
 ---
 
 ## 5. Тестовые учётные записи
 
-После `db:seed` доступны следующие аккаунты:
-
-Все пароли — `password123`.
+После `db:seed`. Пароль у всех: `password123`
 
 | Email | Роль | Команда |
 |---|---|---|
 | `admin@mbank.kg` | ADMIN | VB |
 | `analyst@mbank.kg` | ANALYST | VB |
-| `b2b@mbank.kg` | MANAGER | B2B |
-| `km@mbank.kg` | MANAGER | KM |
-| `kam@mbank.kg` | KAM_ROLE | KAM |
-| `branch@mbank.kg` | MANAGER | BRANCH |
+| `b2b@mbank.kg` | SPECIALIST | B2B |
+| `km@mbank.kg` | SPECIALIST | KM |
+| `kam@mbank.kg` | KAM | KAM |
+| `branch@mbank.kg` | SPECIALIST | BRANCH |
 
 ---
 
-## 6. Настройка cron-заданий
+## 6. Cron-задания
 
-### Вариант A: Vercel Cron
-
-Добавить в `vercel.json`:
+### Вариант A: Vercel Cron (`vercel.json`)
 
 ```json
 {
   "crons": [
-    {
-      "path": "/api/cron/rfm-sync",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/event-triggers",
-      "schedule": "5 3 * * *"
-    },
-    {
-      "path": "/api/cron/escalate",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/reminders",
-      "schedule": "0 9 * * *"
-    }
+    { "path": "/api/cron/rfm-sync",      "schedule": "0 3 * * *"  },
+    { "path": "/api/cron/event-triggers", "schedule": "5 3 * * *"  },
+    { "path": "/api/cron/handoff",        "schedule": "10 3 * * *" },
+    { "path": "/api/cron/escalate",       "schedule": "0 8 * * *"  },
+    { "path": "/api/cron/reminders",      "schedule": "0 9 * * *"  }
   ]
 }
 ```
 
-### Вариант B: Внешний планировщик (cURL)
+### Вариант B: Внешний cURL
 
 ```bash
-# RFM-D Sync — 03:00 ежедневно
 curl -X POST https://your-app.com/api/cron/rfm-sync \
   -H "Authorization: Bearer $CRON_SECRET"
-
-# Event Triggers — 03:05 ежедневно
-curl -X POST https://your-app.com/api/cron/event-triggers \
-  -H "Authorization: Bearer $CRON_SECRET"
-
-# Escalate — 08:00 ежедневно
-curl -X POST https://your-app.com/api/cron/escalate \
-  -H "Authorization: Bearer $CRON_SECRET"
-
-# Reminders — 09:00 ежедневно
-curl -X POST https://your-app.com/api/cron/reminders \
-  -H "Authorization: Bearer $CRON_SECRET"
 ```
 
-### Ручной запуск (для тестирования)
+### Ручной запуск
 
-В интерфейсе: `/admin/notifications` → кнопки ручного запуска (только для ADMIN).
+`/admin/notifications` → кнопки ручного запуска (только ADMIN).
 
 ---
 
-## 7. Настройка Telegram-уведомлений
+## 7. Telegram
 
-1. Создать бота через [@BotFather](https://t.me/BotFather) → получить `TELEGRAM_BOT_TOKEN`
-2. Узнать `chat_id` администратора:
-   ```
-   https://api.telegram.org/bot<TOKEN>/getUpdates
-   ```
-3. Добавить `chat_id` каждому менеджеру в `/admin/users`
-4. Опционально настроить webhook:
-   ```
-   https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-app.com/api/telegram
-   ```
+1. Создать бота: [@BotFather](https://t.me/BotFather) → получить `TELEGRAM_BOT_TOKEN`
+2. Узнать `chat_id`: `https://api.telegram.org/bot<TOKEN>/getUpdates`
+3. Прописать `chat_id` каждому сотруднику в `/admin/users`
 
 ---
 
-## 8. Production build
-
-```bash
-npm run build
-npm run start
-```
-
-Или деплой на Vercel:
-```bash
-npx vercel --prod
-```
-
----
-
-## 9. Обновление Prisma-клиента
+## 8. Обновление схемы
 
 При изменении `prisma/schema.prisma`:
 
 ```bash
-# Создать и применить migration
-DATABASE_URL=$DIRECT_URL npx prisma migrate dev --name describe_change
+# Создать migration (dev)
+dotenvx run -f .env.local -- node_modules/.bin/prisma migrate dev --name describe_change
 
-# Или только применить существующие
-DATABASE_URL=$DIRECT_URL npx prisma migrate deploy
+# Применить на prod
+npm run db:migrate
 
-# Регенерировать client
-npx prisma generate
+# Регенерировать клиент
+npm run db:generate
 ```
+
+> `npx prisma generate` **не работает** с Node.js 22 из-за несовместимости js-yaml в Prisma CLI.
+> Всегда используйте `npm run db:generate` (через `node_modules/.bin/prisma`).
 
 ---
 
 ## Частые проблемы
 
-### `prepared statement already exists`
-PgBouncer в transaction mode не поддерживает prepared statements. Убедитесь, что `DATABASE_URL` содержит `?pgbouncer=true`.
-
-### `Can't reach database server`
-Проверьте что `DATABASE_URL` использует порт 6543 (PgBouncer), а `DIRECT_URL` — 5432 (прямое PG).
-
-### Cron не запускается
-Проверьте что `CRON_SECRET` в `.env.local` совпадает с тем, что передаётся в `Authorization: Bearer ...`.
-
-### Prisma migration зависает
-Всегда запускайте migrations через прямое подключение: `DATABASE_URL=$DIRECT_URL npx prisma migrate deploy`
+| Ошибка | Решение |
+|---|---|
+| `prepared statement already exists` | `DATABASE_URL` должен содержать `?pgbouncer=true` |
+| `Can't reach database server` | Проверьте порты: 6543 (pooler) для `DATABASE_URL`, 5432 для `DIRECT_URL` |
+| Cron не запускается | `CRON_SECRET` в `.env.local` должен совпадать с Bearer-токеном |
+| `prisma generate` ничего не делает | Используйте `npm run db:generate` |
+| Build ошибка `turbopackBuild is not a function` | `NODE_OPTIONS="--max-old-space-size=4096" npm run build` |

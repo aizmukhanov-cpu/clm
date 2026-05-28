@@ -1,0 +1,4 @@
+-- Add product linkage to Activity
+-- product values: MBUSINESS | MKASSA_POS | MKASSA_QR | ACQUIRING | SALARY_PROJECT | PAYROLL | CORPORATE_CARD | CREDIT | DEPOSIT | TRADE_FINANCE
+
+ALTER TABLE "activities" ADD COLUMN "product" TEXT;

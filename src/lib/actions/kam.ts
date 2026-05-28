@@ -38,7 +38,7 @@ export async function getKAMPortfolio(filters: KAMFilters = {}) {
 
   // KAM filter: только admin/analyst может фильтровать по конкретному KAM
   if (filters.kamId && filters.kamId !== "ALL" &&
-      session.role !== UserRole.KAM_ROLE) {
+      session.role !== "KAM") {
     where.kamId = filters.kamId;
   }
 
@@ -64,14 +64,14 @@ export async function getKAMPortfolio(filters: KAMFilters = {}) {
   ]);
 
   // Список KAM для фильтра — только admin/analyst
-  const kams =
-    session.role === UserRole.KAM_ROLE || session.role === UserRole.MANAGER
-      ? []
-      : await db.user.findMany({
-          where: { role: UserRole.KAM_ROLE },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        });
+  const isPersonal = session.role === "KAM" || session.role === "SPECIALIST";
+  const kams = isPersonal
+    ? []
+    : await db.user.findMany({
+        where: { role: "KAM" },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      });
 
   // Portfolio stats — same access scope
   const statsWhere: Record<string, unknown> = {

@@ -12,6 +12,20 @@ const TYPE_LABELS: Record<ActivityType, string> = {
   EMAIL:   "✉️ Письмо",
 };
 
+const PRODUCT_OPTIONS = [
+  { value: "",                 label: "Без привязки к продукту" },
+  { value: "MBUSINESS",       label: "📱 MBusiness" },
+  { value: "MKASSA_POS",      label: "💳 MKassa POS" },
+  { value: "MKASSA_QR",       label: "📷 MKassa QR" },
+  { value: "ACQUIRING",       label: "💰 Эквайринг" },
+  { value: "SALARY_PROJECT",  label: "👥 ЗП-проект" },
+  { value: "PAYROLL",         label: "💼 Зарплата" },
+  { value: "CORPORATE_CARD",  label: "🪪 Корп. карта" },
+  { value: "CREDIT",          label: "📋 Кредит" },
+  { value: "DEPOSIT",         label: "🏦 Депозит" },
+  { value: "TRADE_FINANCE",   label: "📦 Торг. финансирование" },
+];
+
 export default function NewActivityPage() {
   const { id: clientId } = useParams<{ id: string }>();
   const router = useRouter();
@@ -29,16 +43,16 @@ export default function NewActivityPage() {
         <span>/</span>
         <Link href={`/clients/${clientId}`} className="hover:text-gray-600 transition-colors">Карточка</Link>
         <span>/</span>
-        <span className="text-gray-700 font-medium">Добавить контакт</span>
+        <span className="text-gray-700 font-medium">Добавить взаимодействие</span>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-5">Новый контакт</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-5">Новое взаимодействие</h2>
 
         <form action={formAction} className="space-y-4">
           {/* Тип */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Тип контакта</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Тип взаимодействия</label>
             <div className="flex gap-2">
               {(Object.keys(TYPE_LABELS) as ActivityType[]).map((t) => (
                 <label
@@ -59,9 +73,24 @@ export default function NewActivityPage() {
             </div>
           </div>
 
+          {/* Продукт */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              Продукт <span className="text-gray-400">(необязательно)</span>
+            </label>
+            <select
+              name="product"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mbank-green)] focus:border-transparent"
+            >
+              {PRODUCT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Дата */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Дата контакта</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Дата взаимодействия</label>
             <input
               type="date"
               name="date"

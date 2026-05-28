@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { UserRole, CLMStage, CLMCohort } from "@/generated/prisma/client";
 import { calcCohort, calcStageTransition } from "@/lib/clm-rules";
 import type { CohortKey, StageKey } from "@/lib/clm-rules";
+import { capturePortfolioSnapshot } from "@/lib/actions/snapshots";
 
 export type SyncResult = {
   error?: string;
@@ -151,6 +152,11 @@ export async function runCLMSync(): Promise<SyncResult> {
 
     details.push(detail);
   }
+
+  // Захватываем исторический снимок портфеля (non-blocking, ошибки не прерывают sync)
+  capturePortfolioSnapshot().catch((e) =>
+    console.error("[clm-sync] snapshot capture failed:", e),
+  );
 
   return {
     total:          clients.length,

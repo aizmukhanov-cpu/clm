@@ -33,13 +33,19 @@ export const RESOURCE_DESCRIPTIONS: Record<PermissionResource, string> = {
   changelog:   "Когда и кто менял CLM-стадию",
 };
 
-export const CONFIGURABLE_ROLES = ["ANALYST", "MANAGER", "KAM_ROLE"] as const;
+export const CONFIGURABLE_ROLES = [
+  "ANALYST", "DIRECTOR",
+  "TEAM_LEAD", "SUPERVISOR", "SPECIALIST", "KAM",
+] as const;
 export type ConfigurableRole = (typeof CONFIGURABLE_ROLES)[number];
 
 export const ROLE_LABELS: Record<ConfigurableRole, string> = {
-  ANALYST:  "Аналитик",
-  MANAGER:  "Менеджер B2B/KM",
-  KAM_ROLE: "KAM",
+  ANALYST:    "Аналитик",
+  DIRECTOR:   "Директор",
+  TEAM_LEAD:  "Руководитель команды",
+  SUPERVISOR: "Супервайзер",
+  SPECIALIST: "Специалист (B2B/KM/VB/BRANCH)",
+  KAM:        "KAM-менеджер",
 };
 
 export const DEFAULT_PERMISSIONS: Record<ConfigurableRole, Record<PermissionResource, boolean>> = {
@@ -51,7 +57,23 @@ export const DEFAULT_PERMISSIONS: Record<ConfigurableRole, Record<PermissionReso
     tasks:       true,
     changelog:   true,
   },
-  MANAGER: {
+  DIRECTOR: {
+    financials:  true,
+    credit:      true,
+    txn_metrics: true,
+    activities:  true,
+    tasks:       true,
+    changelog:   true,
+  },
+  TEAM_LEAD: {
+    financials:  true,
+    credit:      false,
+    txn_metrics: true,
+    activities:  true,
+    tasks:       true,
+    changelog:   true,
+  },
+  SUPERVISOR: {
     financials:  false,
     credit:      false,
     txn_metrics: true,
@@ -59,7 +81,15 @@ export const DEFAULT_PERMISSIONS: Record<ConfigurableRole, Record<PermissionReso
     tasks:       true,
     changelog:   true,
   },
-  KAM_ROLE: {
+  SPECIALIST: {
+    financials:  false,
+    credit:      false,
+    txn_metrics: true,
+    activities:  true,
+    tasks:       true,
+    changelog:   true,
+  },
+  KAM: {
     financials:  false,
     credit:      false,
     txn_metrics: false,

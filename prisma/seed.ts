@@ -26,10 +26,10 @@ async function main() {
   const users = await Promise.all([
     db.user.upsert({ where: { email: "admin@mbank.kg" },   update: { team: TeamType.VB }, create: { id: "user-admin",   name: "Адал И.",        email: "admin@mbank.kg",   role: UserRole.ADMIN,    team: TeamType.VB, branchId: "branch-bishkek", passwordHash: PASS } }),
     db.user.upsert({ where: { email: "analyst@mbank.kg" }, update: {}, create: { id: "user-analyst", name: "Айгуль К.",      email: "analyst@mbank.kg", role: UserRole.ANALYST,  team: TeamType.VB,  branchId: "branch-bishkek", passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "b2b@mbank.kg" },     update: {}, create: { id: "user-b2b",     name: "Бекзат М.",      email: "b2b@mbank.kg",     role: UserRole.MANAGER,  team: TeamType.B2B, branchId: "branch-osh",     passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "km@mbank.kg" },      update: {}, create: { id: "user-km",      name: "Динара Т.",      email: "km@mbank.kg",      role: UserRole.MANAGER,  team: TeamType.KM,  branchId: "branch-bishkek", passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "kam@mbank.kg" },     update: {}, create: { id: "user-kam",     name: "Нурлан О.",      email: "kam@mbank.kg",     role: UserRole.KAM_ROLE, team: TeamType.KAM,    branchId: "branch-bishkek", passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "branch@mbank.kg" }, update: {}, create: { id: "user-branch", name: "Гүлзат Р.",      email: "branch@mbank.kg",  role: UserRole.MANAGER,  team: TeamType.BRANCH, branchId: "branch-karakol", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "b2b@mbank.kg" },     update: {}, create: { id: "user-b2b",     name: "Бекзат М.",      email: "b2b@mbank.kg",     role: UserRole.SPECIALIST,  team: TeamType.B2B, branchId: "branch-osh",     passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "km@mbank.kg" },      update: {}, create: { id: "user-km",      name: "Динара Т.",      email: "km@mbank.kg",      role: UserRole.SPECIALIST,  team: TeamType.KM,  branchId: "branch-bishkek", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "kam@mbank.kg" },     update: {}, create: { id: "user-kam",     name: "Нурлан О.",      email: "kam@mbank.kg",     role: UserRole.KAM, team: TeamType.KAM,    branchId: "branch-bishkek", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "branch@mbank.kg" }, update: {}, create: { id: "user-branch", name: "Гүлзат Р.",      email: "branch@mbank.kg",  role: UserRole.SPECIALIST,  team: TeamType.BRANCH, branchId: "branch-karakol", passwordHash: PASS } }),
   ]);
 
   console.log(`✓ ${users.length} users`);
@@ -154,9 +154,9 @@ async function main() {
 
   for (const t of branchTargets) {
     await db.branchProductTarget.upsert({
-      where: { branchId_product_year: { branchId: t.branchId, product: t.product, year: YEAR } },
+      where: { branchId_product_year_month: { branchId: t.branchId, product: t.product, year: YEAR, month: 1 } },
       update: { targetCount: t.targetCount },
-      create: { ...t, year: YEAR },
+      create: { ...t, year: YEAR, month: 1 },
     });
   }
   console.log(`✓ Branch product targets seeded (${branchTargets.length} rows)`);

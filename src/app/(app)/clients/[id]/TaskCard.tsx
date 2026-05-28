@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from "react";
 import { format } from "date-fns";
 import { completeTask } from "@/lib/actions/tasks";
+import { taskLabel, TASK_PRIORITY_LABEL } from "@/lib/task-labels";
 
 type Task = {
   id: string;
@@ -20,6 +21,7 @@ const PRIORITY_STYLE: Record<string, string> = {
   P2: "bg-amber-100 text-amber-700",
   P3: "bg-blue-50 text-blue-600",
 };
+
 
 export function TaskCard({ task, clientId }: Props) {
   const [expanded, setExpanded]       = useState(false);
@@ -69,19 +71,19 @@ export function TaskCard({ task, clientId }: Props) {
           <div className="flex items-center gap-1.5 min-w-0">
             {escalated && (
               <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
-                🚨 ESCALATED
+                🚨 Эскалировано
               </span>
             )}
             {task.priority && (
               <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${PRIORITY_STYLE[task.priority] ?? ""}`}>
-                {task.priority}
+                {TASK_PRIORITY_LABEL[task.priority] ?? task.priority}
               </span>
             )}
             <span
               className="font-semibold truncate"
               style={escalated ? { color: "#7c3aed" } : !overdue ? { color: "var(--mbank-green)" } : { color: "#dc2626" }}
             >
-              {task.triggerDay ?? "Задача"}
+              {taskLabel(task.triggerDay)}
             </span>
           </div>
           <span className="text-gray-400 shrink-0">

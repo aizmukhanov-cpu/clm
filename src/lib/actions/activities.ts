@@ -15,11 +15,12 @@ export async function createActivity(
   if (!session) return "Не авторизован";
 
   const type = formData.get("type") as ActivityType;
+  const product = (formData.get("product") as string)?.trim() || null;
   const result = (formData.get("result") as string)?.trim();
   const notes = (formData.get("notes") as string)?.trim() || null;
   const dateRaw = formData.get("date") as string;
 
-  if (!type || !ActivityType[type]) return "Выберите тип контакта";
+  if (!type || !ActivityType[type]) return "Выберите тип взаимодействия";
   if (!result) return "Укажите результат";
   if (!dateRaw) return "Укажите дату";
 
@@ -36,6 +37,7 @@ export async function createActivity(
     data: {
       clientId,
       type,
+      product,
       result,
       notes,
       performedBy: session.id,

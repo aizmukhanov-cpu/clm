@@ -2,10 +2,13 @@ import { getSession } from "@/lib/auth";
 import { LogoutButton } from "./LogoutButton";
 
 const ROLE_LABELS: Record<string, string> = {
-  ADMIN: "Админ",
-  ANALYST: "Аналитик",
-  MANAGER: "Менеджер",
-  KAM_ROLE: "KAM",
+  ADMIN:      "Администратор",
+  DIRECTOR:   "Директор",
+  ANALYST:    "Аналитик",
+  TEAM_LEAD:  "Рук. команды",
+  SUPERVISOR: "Супервайзер",
+  SPECIALIST: "Специалист",
+  KAM:        "KAM",
 };
 
 const TEAM_COLORS: Record<string, string> = {

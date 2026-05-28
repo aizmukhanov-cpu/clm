@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useCallback, useTransition, useState } from "react";
 import { archiveClient, unarchiveClient } from "@/lib/actions/clients";
@@ -21,6 +22,9 @@ type Client = {
   type: string;
   clmStage: string;
   clmCohort: string;
+  sizeCategory:     string | null;
+  activatedAt:      Date | string | null;
+  handoffDoneAt:    Date | string | null;
   txnCount30d:      number | null;
   daysSinceLastTxn: number | null;
   gmv30d:           number | null;
@@ -107,6 +111,30 @@ function CohortBadge({ cohort }: { cohort: string }) {
       style={style}
     >
       {COHORT_LABEL[cohort] ?? cohort}
+    </span>
+  );
+}
+
+const SIZE_STYLE: Record<string, { cls: string; style?: React.CSSProperties }> = {
+  SMALL:  { cls: "bg-blue-50 text-blue-600" },
+  MEDIUM: { cls: "bg-amber-50 text-amber-700" },
+  LARGE:  { cls: "text-white", style: { background: "var(--mbank-green)" } },
+};
+const SIZE_LABEL: Record<string, string> = {
+  SMALL:  "Small",
+  MEDIUM: "Medium",
+  LARGE:  "Large",
+};
+
+function SizeBadge({ size }: { size: string | null }) {
+  if (!size) return <span className="text-gray-300 text-[10px]">—</span>;
+  const s = SIZE_STYLE[size];
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${s?.cls ?? ""}`}
+      style={s?.style}
+    >
+      {SIZE_LABEL[size] ?? size}
     </span>
   );
 }
@@ -332,6 +360,18 @@ export function ClientsTable({
           </SelectContent>
         </Select>
 
+        <Select value={p("size")} onValueChange={(v) => push({ size: v })}>
+          <SelectTrigger className="h-9 w-36 text-sm border-gray-200">
+            <SelectValue placeholder="Сегмент" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Все сегменты</SelectItem>
+            <SelectItem value="SMALL">Small (&lt;10M)</SelectItem>
+            <SelectItem value="MEDIUM">Medium (10–100M)</SelectItem>
+            <SelectItem value="LARGE">Large (100M+)</SelectItem>
+          </SelectContent>
+        </Select>
+
         {/* Архивные клиенты */}
         {canArchive && (
           <button
@@ -346,7 +386,7 @@ export function ClientsTable({
           </button>
         )}
 
-        {["search","stage","cohort","branch","team"].some(k => sp.get(k)) && (
+        {["search","stage","cohort","branch","team","size"].some(k => sp.get(k)) && (
           <button
             onClick={() => router.push(path)}
             className="h-9 px-3 text-xs text-gray-400 hover:text-gray-600 transition-colors"
@@ -444,9 +484,12 @@ export function ClientsTable({
                   <TableCell className="font-mono text-xs text-gray-400">{c.inn}</TableCell>
                   <TableCell>
                     <div className="font-medium text-sm text-gray-900 truncate max-w-[200px]">{c.name}</div>
-                    {c.manager && (
-                      <div className="text-[10px] text-gray-400 mt-0.5">{c.manager.team}</div>
-                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {c.manager && (
+                        <span className="text-[10px] text-gray-400">{c.manager.team}</span>
+                      )}
+                      <SizeBadge size={c.sizeCategory} />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <span className={`text-xs font-medium ${c.type === "YL" ? "text-indigo-600" : "text-teal-600"}`}>

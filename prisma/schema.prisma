@@ -38,10 +38,13 @@ enum TeamType {
 }
 
 enum UserRole {
-  ADMIN
-  ANALYST
-  MANAGER
-  KAM_ROLE
+  ADMIN        // Полный доступ + панель администратора
+  DIRECTOR     // Read-only по всем командам + KPI
+  ANALYST      // Read-only аналитик
+  TEAM_LEAD    // Вся команда (все клиенты своей команды)
+  SUPERVISOR   // Свои подчинённые (по supervisorId)
+  SPECIALIST   // Только свои клиенты (бывший MANAGER)
+  KAM          // Только свои KAM-клиенты (бывший KAM_ROLE)
 }
 
 enum ActivityType {
@@ -69,6 +72,14 @@ enum DealStatus {
   LOST
 }
 
+// Сегментация клиентов по годовому обороту.
+// Используется при автопередаче от охотников (B2B/KM) к фермерам.
+enum ClientSizeCategory {
+  SMALL    // B2B-сегмент: годовой GMV < 10 млн KGS → BRANCH
+  MEDIUM   // KM-сегмент:  годовой GMV 10–100 млн KGS → VB
+  LARGE    // KAM-сегмент: годовой GMV ≥ 100 млн KGS → KAM
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model Branch {
@@ -85,20 +96,50 @@ model Branch {
   @@map("branches")
 }
 
-// Цели филиала по каждому продукту на год
+// Цели филиала по каждому продукту на месяц
 model BranchProductTarget {
   id          String   @id @default(cuid())
   branchId    String   @map("branch_id")
-  product     String   // MBUSINESS | MKASSA_POS | MKASSA_QR | SALARY_PROJECT | ACQUIRING | CREDIT | DEPOSIT | TRADE_FINANCE | PAYROLL | CORPORATE_CARD
+  product     String   // product code (ссылается на products.code)
   targetCount Int      @map("target_count")
-  year        Int      // 2026
+  year        Int
+  month       Int      @default(1) // 1-12
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   branch Branch @relation(fields: [branchId], references: [id])
 
-  @@unique([branchId, product, year])
+  @@unique([branchId, product, year, month])
   @@map("branch_product_targets")
+}
+
+// Цели команды по каждому продукту на месяц (B2B | KM | KAM | VB | BRANCH)
+model TeamProductTarget {
+  id          String   @id @default(cuid())
+  team        String   // B2B | KM | KAM | VB | BRANCH
+  product     String   // product code
+  targetCount Int      @map("target_count")
+  year        Int
+  month       Int      @default(1) // 1-12
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([team, product, year, month])
+  @@map("team_product_targets")
+}
+
+// Каталог банковских продуктов (управляется через /admin/products)
+model Product {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String
+  icon      String   @default("📦")
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("products")
 }
 
 model User {
@@ -110,8 +151,11 @@ model User {
   branchId     String   @map("branch_id")
   passwordHash String   @map("password_hash")
   createdAt    DateTime @default(now()) @map("created_at")
+  supervisorId String?  @map("supervisor_id")  // для SUPERVISOR: кто является руководителем
 
   branch        Branch     @relation(fields: [branchId], references: [id])
+  supervisor    User?      @relation("UserHierarchy", fields: [supervisorId], references: [id])
+  subordinates  User[]     @relation("UserHierarchy")
   managedClients Client[]  @relation("ClientManager")
   kamClients     Client[]  @relation("ClientKAM")
   activities    Activity[]
@@ -133,8 +177,11 @@ model Client {
   managerId        String?    @map("manager_id")
   kamId            String?    @map("kam_id")
   clmStage         CLMStage   @default(ACQUIRE) @map("clm_stage")
-  clmCohort        CLMCohort  @default(NEVER_ACTIVE) @map("clm_cohort")
-  daysSinceLastTxn Int        @default(0) @map("days_since_last_txn")
+  clmCohort        CLMCohort          @default(NEVER_ACTIVE) @map("clm_cohort")
+  sizeCategory     ClientSizeCategory? @map("size_category")   // вычисляется RFM-sync
+  activatedAt      DateTime?           @map("activated_at")    // дата первого перехода в ACTIVATE
+  handoffDoneAt    DateTime?           @map("handoff_done_at") // дата передачи фермеру; null = ещё не передан
+  daysSinceLastTxn Int                @default(0) @map("days_since_last_txn")
   txnCount30d      Int        @default(0) @map("txn_count_30d")
   gmv30d           Float      @default(0) @map("gmv_30d")
   productDepthPct  Float      @default(0) @map("product_depth_pct")
@@ -204,6 +251,7 @@ model Activity {
   id          String       @id @default(cuid())
   clientId    String       @map("client_id")
   type        ActivityType
+  product     String?      // MBUSINESS | MKASSA_POS | MKASSA_QR | ACQUIRING | SALARY_PROJECT | PAYROLL | CORPORATE_CARD | CREDIT | DEPOSIT | TRADE_FINANCE
   result      String
   notes       String?
   performedBy String       @map("performed_by")
@@ -287,6 +335,28 @@ model PermissionConfig {
 
   @@unique([role, resource])
   @@map("permission_configs")
+}
+
+// ─── Исторические снимки портфеля ───────────────────────────
+// Ежедневный снимок агрегированных метрик.
+// Захватывается автоматически при запуске CLM-синхронизации.
+// team = "__all__" → все команды; "B2B" / "KM" / ... → конкретная команда.
+model PortfolioSnapshot {
+  id             String   @id @default(cuid())
+  snapshotDate   DateTime @map("snapshot_date")   // начало дня UTC
+  team           String   @default("__all__")     // "__all__" | TeamType string
+
+  totalClients   Int      @default(0) @map("total_clients")
+  activeClients  Int      @default(0) @map("active_clients")
+  atRiskClients  Int      @default(0) @map("at_risk_clients")
+  lapsedClients  Int      @default(0) @map("lapsed_clients")
+  activationRate Float    @default(0) @map("activation_rate")  // 0–100
+  activitiesWeek Int      @default(0) @map("activities_week")  // взаимодействий за 7 дней до снимка
+
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([snapshotDate, team])
+  @@map("portfolio_snapshots")
 }
 
 // ─── КП-шаблоны (M5) ─────────────────────────────────────

@@ -102,18 +102,8 @@ const TRIGGER_RULES: TriggerRule[] = [
     daysUntilDue: 5,
     assignTo: (c) => c.managerId,
   },
-  {
-    id:       "cross-sell-mbusiness",
-    name:     "Кросс-продажа: MBusiness",
-    priority: "P3",
-    condition: (c, existing) =>
-      c.clmCohort === "ACTIVE" &&
-      !c.hasMBusiness &&
-      !existing.includes("cross-sell-mbusiness"),
-    action:   "Подключить MBusiness: клиент активен, интернет-банк не используется",
-    daysUntilDue: 7,
-    assignTo: (c) => c.managerId,
-  },
+  // cross-sell-mbusiness намеренно убран из авто-задач (P3, слишком широкое условие).
+  // Рекомендация по MBusiness остаётся в NBA (nba.ts) как подсказка без создания задачи.
 
   // ── ACCOUNT REVIEW (KAM) ─────────────────────────────────
   {

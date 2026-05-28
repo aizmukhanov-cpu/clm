@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { completeTask } from "@/lib/actions/tasks";
 import { STAGE_LABELS } from "@/lib/clm-config";
 import type { CLMStage } from "@/generated/prisma/client";
+import { taskLabel, TASK_PRIORITY_LABEL } from "@/lib/task-labels";
 
 type Task = {
   id: string;
@@ -62,7 +63,7 @@ function CompleteModal({
               <Link href={`/clients/${task.client.id}`} className="hover:underline font-medium text-gray-700">
                 {task.client.name}
               </Link>
-              {" · "}{task.triggerDay ?? "Задача"}
+              {" · "}{taskLabel(task.triggerDay)}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none mt-0.5">×</button>
@@ -253,7 +254,7 @@ export function DeskTable({
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
                         style={{ background: style.bg, color: style.text }}
                       >
-                        {t.priority}
+                        {TASK_PRIORITY_LABEL[t.priority] ?? t.priority}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -268,8 +269,8 @@ export function DeskTable({
                     <td className="px-4 py-3 text-xs text-gray-600">
                       {STAGE_LABELS[t.client.clmStage as CLMStage] ?? t.client.clmStage}
                     </td>
-                    <td className="px-4 py-3 text-xs font-mono text-gray-600">
-                      {t.triggerDay ?? "—"}
+                    <td className="px-4 py-3 text-xs text-gray-600">
+                      {taskLabel(t.triggerDay)}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-700 max-w-[200px]">
                       {t.action}

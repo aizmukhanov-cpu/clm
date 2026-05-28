@@ -27,6 +27,17 @@ const COHORT_LABEL: Record<string, string> = {
   ACTIVE:       "Активный",
   LAPSED:       "Отток",
 };
+
+const SIZE_LABEL: Record<string, string> = {
+  SMALL:  "Small  (<10M / год)",
+  MEDIUM: "Medium (10–100M / год)",
+  LARGE:  "Large  (100M+ / год)",
+};
+const SIZE_COLOR: Record<string, { bg: string; text: string }> = {
+  SMALL:  { bg: "#eff6ff", text: "#2563eb" },
+  MEDIUM: { bg: "#fefce8", text: "#92400e" },
+  LARGE:  { bg: "var(--mbank-green-pale)", text: "var(--mbank-green)" },
+};
 const COHORT_STYLE: Record<string, { bg: string; text: string }> = {
   NEVER_ACTIVE: { bg: "#f3f4f6", text: "#6b7280" },
   LOW_ACTIVE:   { bg: "#fefce8", text: "#92400e" },
@@ -38,6 +49,19 @@ const ACTIVITY_ICON: Record<string, string> = {
   CALL:    "📞",
   MEETING: "🤝",
   EMAIL:   "✉️",
+};
+
+const PRODUCT_LABELS: Record<string, string> = {
+  MBUSINESS:      "MBusiness",
+  MKASSA_POS:     "MKassa POS",
+  MKASSA_QR:      "MKassa QR",
+  ACQUIRING:      "Эквайринг",
+  SALARY_PROJECT: "ЗП-проект",
+  PAYROLL:        "Зарплата",
+  CORPORATE_CARD: "Корп. карта",
+  CREDIT:         "Кредит",
+  DEPOSIT:        "Депозит",
+  TRADE_FINANCE:  "Торг. финансирование",
 };
 
 const PRODUCTS = [
@@ -98,9 +122,9 @@ export default async function ClientPage({ params }: { params: Params }) {
 
   const perms = await getPermissionsForRole(session?.role ?? "");
 
-  const canEdit  = session?.role === UserRole.ADMIN || session?.role === "ANALYST";
-  const isKAM    = session?.role === UserRole.KAM_ROLE;
-  const canEditAccountPlan = canEdit || isKAM;
+  const canEdit  = session?.role === "ADMIN" || session?.role === "ANALYST";
+  const isKAM    = session?.role === "KAM";
+  const canEditAccountPlan = canEdit || isKAM || session?.role === "TEAM_LEAD" || session?.role === "SUPERVISOR";
   const activeProducts = PRODUCTS.filter((p) => client[p.key]).length;
 
   // ── Health Score & Churn Risk ────────────────────────────
@@ -250,6 +274,50 @@ export default async function ClientPage({ params }: { params: Params }) {
                   <div className="text-sm font-medium text-gray-800">{value}</div>
                 </div>
               ))}
+
+              {/* ── Сегмент клиента ── */}
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">Сегмент</div>
+                {client.sizeCategory ? (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+                    style={{
+                      background: SIZE_COLOR[client.sizeCategory]?.bg ?? "#f3f4f6",
+                      color:      SIZE_COLOR[client.sizeCategory]?.text ?? "#374151",
+                    }}
+                  >
+                    {SIZE_LABEL[client.sizeCategory] ?? client.sizeCategory}
+                  </span>
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
+              </div>
+
+              {/* ── Статус handoff ── */}
+              <div>
+                <div className="text-xs text-gray-400 mb-0.5">Передача фермеру</div>
+                {client.handoffDoneAt ? (
+                  <span className="text-xs font-medium text-emerald-700">
+                    ✅ {format(new Date(client.handoffDoneAt), "dd.MM.yyyy")}
+                  </span>
+                ) : client.activatedAt && (client.manager?.team === "B2B" || client.manager?.team === "KM") ? (() => {
+                  const daysSince = Math.floor(
+                    (Date.now() - new Date(client.activatedAt).getTime()) / 86_400_000
+                  );
+                  const daysLeft = 60 - daysSince;
+                  return daysLeft <= 0 ? (
+                    <span className="text-xs font-medium text-orange-600">
+                      ⏳ Ожидает ({Math.abs(daysLeft)}д просрочка)
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">
+                      через {daysLeft}д
+                    </span>
+                  );
+                })() : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -526,37 +594,6 @@ export default async function ClientPage({ params }: { params: Params }) {
         {/* ── Right column ── */}
         <div className="space-y-5">
 
-          {/* Cross-sell подсказки */}
-          {(() => {
-            const tips: { icon: string; text: string }[] = [];
-            if (client.gmv30d > 600_000 && !client.hasMKassaPos && !client.hasMKassaQr) {
-              tips.push({ icon: "💳", text: "GMV > 600K — предложите MKassa POS / QR" });
-            }
-            if (client.hasMBusiness && !client.hasSalaryProject && !client.hasPayroll) {
-              tips.push({ icon: "👥", text: "Есть MBusiness, нет зарплатного проекта — cross-sell возможность" });
-            }
-            if (client.txnCount30d >= 5 && !client.hasDeposit && !client.hasCredit) {
-              tips.push({ icon: "🏦", text: "Активный клиент без депозита/кредита — предложите размещение" });
-            }
-            if (client.clmStage === "GROW" && !client.hasTradeFinance && (client.hasCredit || client.hasDeposit)) {
-              tips.push({ icon: "📦", text: "Клиент в GROW с кредитом — предложите торговое финансирование" });
-            }
-            if (tips.length === 0) return null;
-            return (
-              <div className="bg-white rounded-xl border border-amber-100 shadow-sm p-4">
-                <h3 className="text-xs font-semibold text-amber-700 mb-2.5">💡 Cross-sell возможности</h3>
-                <div className="space-y-2">
-                  {tips.map((t, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs text-gray-700 bg-amber-50 rounded-lg px-3 py-2">
-                      <span className="shrink-0">{t.icon}</span>
-                      <span>{t.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
           {/* ── Next Best Action ── */}
           <NBAPanel client={client} />
 
@@ -633,22 +670,22 @@ export default async function ClientPage({ params }: { params: Params }) {
         canEdit={canEdit || isKAM}
       />
 
-      {/* ── Лента активностей ── */}
+      {/* ── Лента взаимодействий ── */}
       {perms.activities ? (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-700">Контакты</h3>
+            <h3 className="text-sm font-semibold text-gray-700">Взаимодействия</h3>
             <Link
               href={`/clients/${client.id}/activity/new`}
               className="text-xs px-3 py-1.5 rounded-lg font-medium text-white transition-opacity hover:opacity-90"
               style={{ background: "var(--mbank-green)" }}
             >
-              + Добавить контакт
+              + Добавить взаимодействие
             </Link>
           </div>
 
           {client.activities.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">Контактов пока нет</p>
+            <p className="text-sm text-gray-400 text-center py-6">Взаимодействий пока нет</p>
           ) : (
             <div className="space-y-3">
               {client.activities.map((a) => (
@@ -663,6 +700,11 @@ export default async function ClientPage({ params }: { params: Params }) {
                         {format(new Date(a.performedAt), "dd.MM.yyyy")}
                       </span>
                     </div>
+                    {a.product && (
+                      <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                        {PRODUCT_LABELS[a.product] ?? a.product}
+                      </span>
+                    )}
                     {a.notes && (
                       <p className="text-xs text-gray-500 mt-0.5 truncate">{a.notes}</p>
                     )}
@@ -675,7 +717,7 @@ export default async function ClientPage({ params }: { params: Params }) {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Контакты</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Взаимодействия</h3>
           <RestrictedSection label="" />
         </div>
       )}
@@ -684,7 +726,7 @@ export default async function ClientPage({ params }: { params: Params }) {
       <ClientNotes
         clientId={client.id}
         initialNotes={clientNotes}
-        canEdit={canEdit || session?.role === "MANAGER"}
+        canEdit={canEdit || session?.role === "SPECIALIST" || session?.role === "KAM" || session?.role === "SUPERVISOR" || session?.role === "TEAM_LEAD"}
       />
     </div>
   );

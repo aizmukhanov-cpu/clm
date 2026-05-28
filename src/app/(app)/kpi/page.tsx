@@ -4,6 +4,65 @@ import { getSession } from "@/lib/auth";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { TeamSection } from "./TeamSection";
+import type { ActivationTrendPoint } from "@/lib/actions/kpi";
+
+/* ─── Sparkline (server-side SVG) ─────────────────────── */
+function Sparkline({
+  data, color = "var(--mbank-green)", width = 80, height = 24,
+}: { data: number[]; color?: string; width?: number; height?: number }) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data), max = Math.max(...data), range = max - min || 1;
+  const pts = data.map((v, i) => [
+    Number(((i / (data.length - 1)) * width).toFixed(1)),
+    Number((height - ((v - min) / range) * (height - 2) - 1).toFixed(1)),
+  ]);
+  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p[0]} ${p[1]}`).join(" ");
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0 overflow-visible">
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="2.5" fill={color} />
+    </svg>
+  );
+}
+
+function TrendPanel({ trend }: { trend: ActivationTrendPoint[] }) {
+  if (trend.length < 2) return null;
+  const rates  = trend.map((t) => t.activationRate);
+  const first  = trend[0];
+  const last   = trend[trend.length - 1];
+  const delta  = Math.round((last.activationRate - first.activationRate) * 10) / 10;
+  const color  = last.activationRate >= 50 ? "var(--mbank-green)" : last.activationRate >= 30 ? "#d97706" : "#ef4444";
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700">Динамика активации</h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {format(first.date, "dd MMM", { locale: ru })} — {format(last.date, "dd MMM", { locale: ru })}
+            {" · "}{trend.length} снимков
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold" style={{ color }}>
+            {last.activationRate.toFixed(1)}%
+          </div>
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+            style={{ color: delta >= 0 ? "var(--mbank-green)" : "#dc2626", background: delta >= 0 ? "var(--mbank-green-pale)" : "#fef2f2" }}
+          >
+            {delta >= 0 ? "+" : ""}{delta}pp
+          </span>
+        </div>
+      </div>
+      <Sparkline data={rates} width={360} height={48} color={color} />
+      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+        <span>{first.activationRate.toFixed(1)}%</span>
+        <span className="font-medium text-gray-500">Цель: 60%</span>
+        <span>{last.activationRate.toFixed(1)}%</span>
+      </div>
+    </div>
+  );
+}
 
 const TEAM_COLORS: Record<string, { bg: string; text: string }> = {
   B2B:    { bg: "#eff6ff", text: "#1d4ed8" },
@@ -28,7 +87,7 @@ export default async function KPIPage() {
 
   /* ── MANAGER / KAM_ROLE — личный KPI ─────────────────── */
   if (data.kind === "personal") {
-    const { kpi } = data;
+    const { kpi, trend } = data;
     const teamCol = TEAM_COLORS[kpi.manager.team] ?? { bg: "#f3f4f6", text: "#374151" };
 
     return (
@@ -96,6 +155,8 @@ export default async function KPIPage() {
           ))}
         </div>
 
+        <TrendPanel trend={trend} />
+
         <p className="text-[11px] text-gray-400">
           * Активные клиенты = ≥1 транзакция {">"} 100 сом за 30 дней.
           Активации = переводы в стадию ACTIVATE за текущий месяц.
@@ -106,7 +167,7 @@ export default async function KPIPage() {
 
   /* ── ANALYST — своя команда ───────────────────────────── */
   if (data.kind === "team") {
-    const { team } = data;
+    const { team, trend } = data;
     const col = TEAM_COLORS[team.team] ?? { bg: "#f3f4f6", text: "#374151" };
 
     return (
@@ -151,6 +212,8 @@ export default async function KPIPage() {
         {/* Manager breakdown — always expanded for team view */}
         <TeamSection team={team} defaultOpen={true} />
 
+        <TrendPanel trend={trend} />
+
         <p className="text-[11px] text-gray-400">
           * Активные = ≥1 тр. {">"} 100 сом за 30 дней. Активации = ACTIVATE за месяц.
         </p>
@@ -159,7 +222,7 @@ export default async function KPIPage() {
   }
 
   /* ── ADMIN — все команды ──────────────────────────────── */
-  const { teams } = data;
+  const { teams, trend } = data;
 
   // Суммарно по всем командам
   const grand = teams.reduce(
@@ -214,6 +277,8 @@ export default async function KPIPage() {
           <TeamSection key={team.team} team={team} defaultOpen={false} />
         ))}
       </div>
+
+      <TrendPanel trend={trend} />
 
       <p className="text-[11px] text-gray-400">
         * Активные = ≥1 тр. {">"} 100 сом за 30 дней. Активации = ACTIVATE за месяц.

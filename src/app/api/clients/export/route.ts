@@ -23,8 +23,15 @@ export async function GET(req: NextRequest) {
   const search = sp.get("search") || undefined;
 
   const roleFilter: Record<string, unknown> = {};
-  if (session.role === "MANAGER")  roleFilter.managerId = session.id;
-  if (session.role === "KAM_ROLE") roleFilter.kamId     = session.id;
+  if (session.role === "SPECIALIST") roleFilter.managerId = session.id;
+  if (session.role === "KAM")        roleFilter.kamId     = session.id;
+  if (session.role === "SUPERVISOR") {
+    // Supervisor exports own + subordinates' clients
+    roleFilter.OR = [
+      { managerId: session.id },
+      { manager: { supervisorId: session.id } },
+    ];
+  }
 
   const where: Record<string, unknown> = {
     ...roleFilter, isArchived: false,

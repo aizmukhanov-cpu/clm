@@ -8,8 +8,9 @@
  * В production эти поля обновляются CDC-пайплайном из core banking.
  */
 
-export type CohortKey  = "NEVER_ACTIVE" | "LOW_ACTIVE" | "ACTIVE" | "LAPSED";
-export type StageKey   = "ACQUIRE" | "ONBOARD" | "ACTIVATE" | "GROW" | "REACTIVATE";
+export type CohortKey        = "NEVER_ACTIVE" | "LOW_ACTIVE" | "ACTIVE" | "LAPSED";
+export type StageKey         = "ACQUIRE" | "ONBOARD" | "ACTIVATE" | "GROW" | "REACTIVATE";
+export type SizeCategoryKey  = "SMALL" | "MEDIUM" | "LARGE";
 
 // ─── Пороговые значения ────────────────────────────────────
 // Изменяемые: в будущем вынести в SystemConfig + UI редактор
@@ -26,6 +27,31 @@ export const THRESHOLDS = {
   DORMANT_DAYS:      60,        // дней без тр. → вход в REACTIVATE
   RETURN_TXN:         1,        // транзакций за 30д → выход из REACTIVATE
 } as const;
+
+// ─── Сегментация клиентов по размеру бизнеса ─────────────────
+// Пороги годового GMV (приближение: gmv30d × 12).
+// B2B ведёт клиентов SMALL, KM — MEDIUM, KAM — LARGE.
+// После 60 дней в ACTIVATE/GROW охотники (B2B/KM) передают клиентов фермерам.
+
+export const SIZE_THRESHOLDS = {
+  B2B_ANNUAL_MAX:    10_000_000,   // < 10 млн KGS/год → SMALL  (B2B-сегмент)
+  KM_ANNUAL_MAX:    100_000_000,   // < 100 млн KGS/год → MEDIUM (KM-сегмент)
+} as const;
+
+/** Кол-во дней в ACTIVATE/GROW до автопередачи клиента фермеру */
+export const HANDOFF_DAYS = 60 as const;
+
+/**
+ * Команда-фермер для каждого размера клиента.
+ * SMALL  → BRANCH (филиальный менеджер)
+ * MEDIUM → VB     (вертикаль бизнеса)
+ * LARGE  → KAM    (ключевой аккаунт-менеджер)
+ */
+export const HANDOFF_TARGET_TEAM: Record<SizeCategoryKey, "BRANCH" | "VB" | "KAM"> = {
+  SMALL:  "BRANCH",
+  MEDIUM: "VB",
+  LARGE:  "KAM",
+};
 
 // ─── Описания правил (для UI) ──────────────────────────────
 
@@ -92,6 +118,17 @@ export function calcCohort(c: ClientSnapshot): CohortKey {
   if (daysSinceLastTxn >= THRESHOLDS.LAPSED_DAYS) return "LAPSED";
 
   return "NEVER_ACTIVE";
+}
+
+/**
+ * Определяет размерную категорию клиента по месячному GMV.
+ * Годовой GMV = gmv30d × 12 (приближение для сегментации).
+ */
+export function calcSizeCategory(gmv30d: number): SizeCategoryKey {
+  const annualGmv = gmv30d * 12;
+  if (annualGmv < SIZE_THRESHOLDS.B2B_ANNUAL_MAX) return "SMALL";
+  if (annualGmv < SIZE_THRESHOLDS.KM_ANNUAL_MAX)  return "MEDIUM";
+  return "LARGE";
 }
 
 /**

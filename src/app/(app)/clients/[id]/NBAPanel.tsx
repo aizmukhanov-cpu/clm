@@ -19,7 +19,7 @@ type Props = {
     hasTradeFinance:  boolean;
     hasPayroll:       boolean;
     hasCorporateCard: boolean;
-    tasks:            unknown[];
+    tasks:            { triggerDay: string | null; status: string }[];
     activities:       { performedAt: Date }[];
     kamId:            string | null;
   };
@@ -56,6 +56,13 @@ export function NBAPanel({ client }: Props) {
       ? daysSince(client.activities[0].performedAt)
       : null;
 
+  // Собираем triggerDay всех активных задач (PENDING / OVERDUE)
+  // NBA использует их чтобы не дублировать уже созданные задачи
+  const activeTriggers = client.tasks
+    .filter(t => t.status === "PENDING" || t.status === "OVERDUE")
+    .map(t => t.triggerDay)
+    .filter((d): d is string => d !== null);
+
   const recs = getNextBestActions({
     clmStage:         client.clmStage,
     clmCohort:        client.clmCohort,
@@ -76,6 +83,7 @@ export function NBAPanel({ client }: Props) {
     openTasksCount:   client.tasks.length,
     lastActivityDays,
     isKAMClient:      client.kamId !== null,
+    activeTriggers,
   });
 
   if (recs.length === 0) {

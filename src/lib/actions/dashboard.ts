@@ -4,24 +4,46 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { UserRole, CLMStage, CLMCohort, DealStatus } from "@/generated/prisma/client";
 import { clientAccessWhere } from "@/lib/access";
+import { getSnapshotHistory } from "@/lib/actions/snapshots";
+import type { SnapshotPoint } from "@/lib/actions/snapshots";
+
+/* ─── Weekly trend helpers ─────────────────────────────── */
+
+/** Generates N weekly buckets ending now (newest last). */
+function weekBuckets(n: number): { start: Date; end: Date; label: string }[] {
+  const now = new Date();
+  return Array.from({ length: n }, (_, i) => {
+    const end   = new Date(now); end.setDate(now.getDate() - 7 * i);
+    const start = new Date(end); start.setDate(end.getDate() - 7);
+    const d     = new Date(start);
+    const label = `${d.getDate().toString().padStart(2, "0")}.${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+    return { start, end, label };
+  }).reverse();
+}
 
 export async function getDashboardData() {
   const session = await getSession();
   if (!session) return null;
 
-  const isManager = session.role === "MANAGER";
-
+  // Dashboard доступен для ADMIN, DIRECTOR, ANALYST, TEAM_LEAD
+  // Specialists/KAM/Supervisor используют "Мой портфель"
   const clientWhere: Record<string, unknown> = {
     isArchived: false,
     ...clientAccessWhere(session),
   };
 
   const taskWhere: Record<string, unknown> = { status: { not: "DONE" } };
-  if (isManager) taskWhere.assignedTo = session.id;
 
-  const now  = new Date();
-  const week = new Date(now);
-  week.setDate(week.getDate() - 7);
+  const now      = new Date();
+  const week     = new Date(now);  week.setDate(week.getDate() - 7);
+  const month    = new Date(now);  month.setDate(month.getDate() - 30);
+  const prevWeekStart = new Date(now); prevWeekStart.setDate(now.getDate() - 14);
+  const prevWeekEnd   = week;
+  const prevMonthStart = new Date(now); prevMonthStart.setDate(now.getDate() - 60);
+  const prevMonthEnd   = month;
+
+  const TREND_WEEKS = 8;
+  const buckets = weekBuckets(TREND_WEEKS);
 
   const [
     stageGroups,
@@ -46,6 +68,10 @@ export async function getDashboardData() {
     productSums,
     branchActiveGroups,
     topRiskClients,
+    snapshotHistory,
+    weeklyActivityTrend,
+    weeklyActivationsTrend,
+    activitiesWeekPrev,
   ] = await Promise.all([
     // CLM funnel
     db.client.groupBy({
@@ -107,19 +133,13 @@ export async function getDashboardData() {
 
     // Activities this week
     db.activity.count({
-      where: {
-        performedAt: { gte: week },
-        ...(isManager ? { performedBy: session.id } : {}),
-      },
+      where: { performedAt: { gte: week } },
     }),
 
     // Activity breakdown by type this week
     db.activity.groupBy({
       by: ["type"],
-      where: {
-        performedAt: { gte: week },
-        ...(isManager ? { performedBy: session.id } : {}),
-      },
+      where: { performedAt: { gte: week } },
       _count: { id: true },
     }),
 
@@ -139,7 +159,7 @@ export async function getDashboardData() {
 
     // Recent activities
     db.activity.findMany({
-      where: isManager ? { performedBy: session.id } : {},
+      where: {},
       include: {
         client: { select: { id: true, name: true } },
         user:   { select: { name: true } },
@@ -209,6 +229,29 @@ export async function getDashboardData() {
       orderBy: { daysSinceLastTxn: "desc" },
       take: 5,
     }),
+
+    // Snapshot history for sparklines
+    getSnapshotHistory(12),
+
+    // Weekly activity counts (last 8 weeks) — for bar chart
+    Promise.all(
+      buckets.map((b) =>
+        db.activity.count({ where: { performedAt: { gte: b.start, lt: b.end } } })
+          .then((count) => ({ label: b.label, count }))
+      )
+    ),
+
+    // Weekly activations (transitions to ACTIVATE stage, last 8 weeks)
+    Promise.all(
+      buckets.map((b) =>
+        db.changelog.count({
+          where: { field: "clmStage", newVal: "ACTIVATE", changedAt: { gte: b.start, lt: b.end } },
+        }).then((count) => ({ label: b.label, count }))
+      )
+    ),
+
+    // Activities previous week (7–14 days ago) — for WoW delta
+    db.activity.count({ where: { performedAt: { gte: prevWeekStart, lt: prevWeekEnd } } }),
   ]);
 
   // Build stage funnel map
@@ -260,6 +303,11 @@ export async function getDashboardData() {
     pct: totalClients > 0 ? Math.round((p.count / totalClients) * 100) : 0,
   })).sort((a, b) => b.count - a.count);
 
+  // WoW delta for activities (%)
+  const activitiesWoWDelta = activitiesWeekPrev > 0
+    ? Math.round(((activitiesWeek - activitiesWeekPrev) / activitiesWeekPrev) * 100)
+    : null;
+
   return {
     totalClients,
     stageFunnel,
@@ -270,6 +318,7 @@ export async function getDashboardData() {
       km:  { count: kmDeals._count.id,  amount: kmDeals._sum.amount  ?? 0 },
     },
     activitiesWeek,
+    activitiesWoWDelta,
     actTypeMap,
     recentActivities,
     recentChangelogs,
@@ -284,5 +333,9 @@ export async function getDashboardData() {
     branchStats,
     productAdoption,
     topRiskClients,
+    // ── Тренды ───────────────────────────────────────────
+    snapshotHistory,
+    weeklyActivityTrend,
+    weeklyActivationsTrend,
   };
 }

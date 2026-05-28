@@ -11,7 +11,7 @@ export async function upsertAccountPlan(
 ): Promise<string | null> {
   const session = await getSession();
   if (!session) return "Не авторизован";
-  if (session.role !== "ADMIN" && session.role !== "ANALYST" && session.role !== "KAM_ROLE") {
+  if (!["ADMIN", "ANALYST", "KAM", "TEAM_LEAD", "SUPERVISOR"].includes(session.role)) {
     return "Недостаточно прав";
   }
 
