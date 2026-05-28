@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum CLMStage {
+  ACQUIRE
+  ONBOARD
+  ACTIVATE
+  GROW
+  REACTIVATE
+}
+
+enum CLMCohort {
+  NEVER_ACTIVE
+  LOW_ACTIVE
+  ACTIVE
+  LAPSED
+}
+
+enum ClientType {
+  YL
+  IP
+}
+
+enum TeamType {
+  VB
+  B2B
+  KM
+  KAM
+  BRANCH
+}
+
+enum UserRole {
+  ADMIN
+  ANALYST
+  MANAGER
+  KAM_ROLE
+}
+
+enum ActivityType {
+  CALL
+  MEETING
+  EMAIL
+}
+
+enum TaskStatus {
+  PENDING
+  DONE
+  OVERDUE
+  ESCALATED
+}
+
+enum TaskPriority {
+  P1
+  P2
+  P3
+}
+
+enum DealStatus {
+  ACTIVE
+  WON
+  LOST
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model Branch {
+  id         String   @id @default(cuid())
+  name       String
+  region     String
+  targetPct  Float    @default(60) @map("target_pct")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  users          User[]
+  clients        Client[]
+  productTargets BranchProductTarget[]
+
+  @@map("branches")
+}
+
+// Цели филиала по каждому продукту на год
+model BranchProductTarget {
+  id          String   @id @default(cuid())
+  branchId    String   @map("branch_id")
+  product     String   // MBUSINESS | MKASSA_POS | MKASSA_QR | SALARY_PROJECT | ACQUIRING | CREDIT | DEPOSIT | TRADE_FINANCE | PAYROLL | CORPORATE_CARD
+  targetCount Int      @map("target_count")
+  year        Int      // 2026
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([branchId, product, year])
+  @@map("branch_product_targets")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  role         UserRole
+  team         TeamType
+  branchId     String   @map("branch_id")
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  branch        Branch     @relation(fields: [branchId], references: [id])
+  managedClients Client[]  @relation("ClientManager")
+  kamClients     Client[]  @relation("ClientKAM")
+  activities    Activity[]
+  tasks         Task[]
+  deals         Deal[]
+  changelogs    Changelog[]
+
+  @@map("users")
+}
+
+model Client {
+  id               String     @id @default(cuid())
+  inn              String     @unique
+  name             String
+  type             ClientType
+  okved            String?
+  accountOpenedAt  DateTime?  @map("account_opened_at")
+  branchId         String     @map("branch_id")
+  managerId        String?    @map("manager_id")
+  kamId            String?    @map("kam_id")
+  clmStage         CLMStage   @default(ACQUIRE) @map("clm_stage")
+  clmCohort        CLMCohort  @default(NEVER_ACTIVE) @map("clm_cohort")
+  daysSinceLastTxn Int        @default(0) @map("days_since_last_txn")
+  txnCount30d      Int        @default(0) @map("txn_count_30d")
+  gmv30d           Float      @default(0) @map("gmv_30d")
+  productDepthPct  Float      @default(0) @map("product_depth_pct")
+  isArchived       Boolean    @default(false) @map("is_archived")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  // Продуктовая карта
+  hasMBusiness     Boolean @default(false) @map("has_mbusiness")
+  hasMKassaPos     Boolean @default(false) @map("has_mkassa_pos")
+  hasMKassaQr      Boolean @default(false) @map("has_mkassa_qr")
+  hasSalaryProject Boolean @default(false) @map("has_salary_project")
+  hasAcquiring     Boolean @default(false) @map("has_acquiring")
+  hasCredit        Boolean @default(false) @map("has_credit")
+  hasDeposit       Boolean @default(false) @map("has_deposit")
+  hasTradeFinance  Boolean @default(false) @map("has_trade_finance")
+  hasPayroll       Boolean @default(false) @map("has_payroll")
+  hasCorporateCard Boolean @default(false) @map("has_corporate_card")
+
+  notes            String?  // Свободные заметки менеджера о клиенте
+
+  branch         Branch          @relation(fields: [branchId], references: [id])
+  manager        User?           @relation("ClientManager", fields: [managerId], references: [id])
+  kam            User?           @relation("ClientKAM", fields: [kamId], references: [id])
+  activities     Activity[]
+  tasks          Task[]
+  deals          Deal[]
+  changelogs     Changelog[]
+  contactPersons ContactPerson[]
+  accountPlan    AccountPlan?
+
+  @@map("clients")
+}
+
+model ContactPerson {
+  id              String   @id @default(cuid())
+  clientId        String   @map("client_id")
+  name            String
+  role            String?
+  phone           String?
+  email           String?
+  isDecisionMaker Boolean  @default(false) @map("is_decision_maker")
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("contact_persons")
+}
+
+model AccountPlan {
+  id            String    @id @default(cuid())
+  clientId      String    @unique @map("client_id")
+  revenueTarget Float?    @map("revenue_target")
+  revenueActual Float?    @map("revenue_actual")
+  nextMeeting   DateTime? @map("next_meeting")
+  initiatives   String?   // JSON-encoded string[]
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  updatedBy     String?   @map("updated_by")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("account_plans")
+}
+
+model Activity {
+  id          String       @id @default(cuid())
+  clientId    String       @map("client_id")
+  type        ActivityType
+  result      String
+  notes       String?
+  performedBy String       @map("performed_by")
+  performedAt DateTime     @map("performed_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+  user   User   @relation(fields: [performedBy], references: [id])
+
+  @@map("activities")
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  clientId    String       @map("client_id")
+  triggerDay  String?      @map("trigger_day")
+  assignedTo  String       @map("assigned_to")
+  dueDate     DateTime     @map("due_date")
+  priority    TaskPriority @default(P3)
+  action      String
+  result      String?
+  status      TaskStatus   @default(PENDING)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+  user   User   @relation(fields: [assignedTo], references: [id])
+
+  @@map("tasks")
+}
+
+model Deal {
+  id            String     @id @default(cuid())
+  clientId      String?    @map("client_id")
+  leadName      String?    @map("lead_name")
+  ownerId       String     @map("owner_id")
+  team          TeamType
+  stage         String
+  productName   String?    @map("product_name")
+  amount        Float?
+  probability   Int?
+  expectedClose DateTime?  @map("expected_close")
+  lostReason    String?    @map("lost_reason")
+  notes         String?
+  status        DealStatus @default(ACTIVE)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  client Client? @relation(fields: [clientId], references: [id])
+  owner  User    @relation(fields: [ownerId], references: [id])
+
+  @@map("deals")
+}
+
+model Changelog {
+  id        String   @id @default(cuid())
+  clientId  String   @map("client_id")
+  changedBy String   @map("changed_by")
+  changedAt DateTime @default(now()) @map("changed_at")
+  field     String
+  oldVal    String?  @map("old_val")
+  newVal    String?  @map("new_val")
+
+  client Client @relation(fields: [clientId], references: [id])
+  user   User   @relation(fields: [changedBy], references: [id])
+
+  @@map("changelogs")
+}
+
+// ─── Permission Matrix ────────────────────────────────────
+// Controls which roles can see sensitive data sections.
+// ADMIN always has full access (enforced in code, not stored here).
+
+model PermissionConfig {
+  id        String   @id @default(cuid())
+  role      String   // 'ANALYST' | 'MANAGER' | 'KAM_ROLE'
+  resource  String   // see PERMISSION_RESOURCES in src/lib/permissions.ts
+  canView   Boolean  @default(true)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  @@unique([role, resource])
+  @@map("permission_configs")
+}
+
+// ─── КП-шаблоны (M5) ─────────────────────────────────────
+model ProposalTemplate {
+  id          String   @id @default(cuid())
+  title       String
+  team        TeamType
+  productName String   @map("product_name")
+  body        String   // Markdown / plain text тела КП
+  tags        String?  // comma-separated tags
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("proposal_templates")
+}

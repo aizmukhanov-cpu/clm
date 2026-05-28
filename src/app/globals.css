@@ -1,8 +1,19 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/* ─── MBank Brand Tokens ─────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Raw hex for direct use */
+  --mbank-green:      #1A5C38;
+  --mbank-green-dark: #0D3321;
+  --mbank-green-mid:  #236B45;
+  --mbank-green-pale: #E8F2EC;
+  --mbank-gold:       #C6903A;
+  --mbank-gold-light: #D4A84E;
+  --mbank-gold-pale:  #FDF4E7;
 }
 
 @theme inline {
@@ -10,17 +21,116 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* MBank Green as primary */
+  --primary:            oklch(0.36 0.115 152);   /* #1A5C38 */
+  --primary-foreground: oklch(1 0 0);            /* white */
+
+  /* Gold as secondary */
+  --secondary:            oklch(0.64 0.12 68);   /* #C6903A */
+  --secondary-foreground: oklch(1 0 0);
+
+  /* Page & card backgrounds */
+  --background: oklch(0.979 0.005 152);          /* off-white, slight green tint */
+  --foreground: oklch(0.16 0.02 152);            /* near-black with green hue */
+  --card:             oklch(1 0 0);              /* pure white */
+  --card-foreground:  oklch(0.16 0.02 152);
+  --popover:          oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.02 152);
+
+  /* Muted — light green tint */
+  --muted:            oklch(0.96 0.012 152);
+  --muted-foreground: oklch(0.52 0.04 152);
+
+  /* Accent — pale green for hovers */
+  --accent:            oklch(0.94 0.02 152);
+  --accent-foreground: oklch(0.26 0.09 152);
+
+  /* Destructive */
+  --destructive: oklch(0.577 0.245 27.325);
+
+  /* Borders & inputs */
+  --border: oklch(0.91 0.015 152);
+  --input:  oklch(0.91 0.015 152);
+  --ring:   oklch(0.36 0.115 152);              /* green ring on focus */
+
+  --radius: 0.5rem;
+
+  /* Chart palette: green tones + gold */
+  --chart-1: oklch(0.36 0.115 152);   /* primary green */
+  --chart-2: oklch(0.64 0.12 68);     /* gold */
+  --chart-3: oklch(0.52 0.09 152);    /* mid green */
+  --chart-4: oklch(0.75 0.09 152);    /* light green */
+  --chart-5: oklch(0.88 0.04 152);    /* pale green */
+
+  /* Sidebar — deep dark green */
+  --sidebar:                    oklch(0.22 0.07 152);   /* #0D3321 */
+  --sidebar-foreground:         oklch(0.95 0.015 152);
+  --sidebar-primary:            oklch(0.64 0.12 68);    /* gold for active */
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent:             oklch(0.28 0.09 152);   /* slightly lighter green */
+  --sidebar-accent-foreground:  oklch(1 0 0);
+  --sidebar-border:             oklch(0.28 0.07 152);
+  --sidebar-ring:               oklch(0.64 0.12 68);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ─── Utility classes ─────────────────────────────────────── */
+@layer utilities {
+  .badge-stage-acquire    { @apply bg-gray-100 text-gray-700; }
+  .badge-stage-onboard    { @apply bg-blue-50 text-blue-700; }
+  .badge-stage-activate   { @apply bg-amber-50 text-amber-700; }
+  .badge-stage-grow       { background: var(--mbank-green-pale); color: var(--mbank-green); }
+  .badge-stage-reactivate { @apply bg-orange-50 text-orange-700; }
+
+  .badge-cohort-active       { background: var(--mbank-green-pale); color: var(--mbank-green); }
+  .badge-cohort-low_active   { @apply bg-yellow-50 text-yellow-800; }
+  .badge-cohort-never_active { @apply bg-gray-100 text-gray-600; }
+  .badge-cohort-lapsed       { @apply bg-red-50 text-red-700; }
 }
