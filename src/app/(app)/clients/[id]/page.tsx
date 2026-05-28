@@ -15,6 +15,8 @@ import { getHealthScore } from "@/lib/health-score";
 import { getChurnRisk } from "@/lib/churn-risk";
 import { getActiveSequences } from "@/lib/actions/sequences";
 import { getClientNotes } from "@/lib/actions/clients";
+import { getKYCChecklist } from "@/lib/actions/kyc";
+import { KYCPanel } from "./KYCPanel";
 import { UserRole } from "@/generated/prisma/client";
 import { formatDistanceToNow, format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -46,9 +48,11 @@ const COHORT_STYLE: Record<string, { bg: string; text: string }> = {
 };
 
 const ACTIVITY_ICON: Record<string, string> = {
-  CALL:    "📞",
-  MEETING: "🤝",
-  EMAIL:   "✉️",
+  CALL:     "📞",
+  MEETING:  "🤝",
+  EMAIL:    "✉️",
+  WHATSAPP: "💬",
+  VISIT:    "🏢",
 };
 
 const PRODUCT_LABELS: Record<string, string> = {
@@ -154,9 +158,10 @@ export default async function ClientPage({ params }: { params: Params }) {
     lastActivityDays,
   });
 
-  const [activeSequences, clientNotes] = await Promise.all([
+  const [activeSequences, clientNotes, kycRows] = await Promise.all([
     getActiveSequences(client.id),
     getClientNotes(client.id),
+    getKYCChecklist(client.id),
   ]);
 
   // D+14 warning — ACTIVATE stage, 14+ days without txn
@@ -721,6 +726,9 @@ export default async function ClientPage({ params }: { params: Params }) {
           <RestrictedSection label="" />
         </div>
       )}
+
+      {/* ── KYC Checklist ── */}
+      <KYCPanel clientId={client.id} rows={kycRows} />
 
       {/* ── Client Notes ── */}
       <ClientNotes

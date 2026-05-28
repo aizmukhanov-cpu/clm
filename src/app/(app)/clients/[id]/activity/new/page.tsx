@@ -7,9 +7,11 @@ import { createActivity } from "@/lib/actions/activities";
 import { ActivityType } from "@/generated/prisma/client";
 
 const TYPE_LABELS: Record<ActivityType, string> = {
-  CALL:    "📞 Звонок",
-  MEETING: "🤝 Встреча",
-  EMAIL:   "✉️ Письмо",
+  CALL:     "📞 Звонок",
+  MEETING:  "🤝 Встреча",
+  EMAIL:    "✉️ Письмо",
+  WHATSAPP: "💬 WhatsApp",
+  VISIT:    "🏢 Выезд",
 };
 
 const PRODUCT_OPTIONS = [
@@ -53,11 +55,11 @@ export default function NewActivityPage() {
           {/* Тип */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Тип взаимодействия</label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {(Object.keys(TYPE_LABELS) as ActivityType[]).map((t) => (
                 <label
                   key={t}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm cursor-pointer has-[:checked]:border-[var(--mbank-green)] has-[:checked]:bg-[var(--mbank-green-pale)] has-[:checked]:text-[var(--mbank-green)] transition-colors"
+                  className="flex flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 px-2 py-2.5 text-xs cursor-pointer has-[:checked]:border-[var(--mbank-green)] has-[:checked]:bg-[var(--mbank-green-pale)] has-[:checked]:text-[var(--mbank-green)] transition-colors text-center"
                 >
                   <input
                     type="radio"
@@ -67,7 +69,8 @@ export default function NewActivityPage() {
                     required
                     defaultChecked={t === "CALL"}
                   />
-                  {TYPE_LABELS[t]}
+                  <span className="text-base">{TYPE_LABELS[t].split(" ")[0]}</span>
+                  <span className="font-medium">{TYPE_LABELS[t].split(" ").slice(1).join(" ")}</span>
                 </label>
               ))}
             </div>

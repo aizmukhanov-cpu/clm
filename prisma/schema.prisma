@@ -51,6 +51,8 @@ enum ActivityType {
   CALL
   MEETING
   EMAIL
+  WHATSAPP
+  VISIT
 }
 
 enum TaskStatus {
@@ -72,6 +74,24 @@ enum DealStatus {
   LOST
 }
 
+enum DealLostReason {
+  PRICE           // Цена / тариф не устроил
+  COMPETITOR      // Ушёл к конкуренту
+  NO_NEED         // Нет потребности в продукте
+  TIMING          // Не готов сейчас, вернётся позже
+  NO_BUDGET       // Нет бюджета
+  DOCS_MISSING    // Не хватает документов / не прошёл KYC
+  AML_DECLINED    // Отказ по AML/compliance
+  CONTACT_LOST    // Потеряли контакт (ghosting)
+  OTHER           // Другое
+}
+
+enum KYCItemStatus {
+  PENDING
+  DONE
+  N_A
+}
+
 // Сегментация клиентов по годовому обороту.
 // Используется при автопередаче от охотников (B2B/KM) к фермерам.
 enum ClientSizeCategory {
@@ -83,11 +103,14 @@ enum ClientSizeCategory {
 // ─── Models ──────────────────────────────────────────────
 
 model Branch {
-  id         String   @id @default(cuid())
-  name       String
-  region     String
-  targetPct  Float    @default(60) @map("target_pct")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id                  String   @id @default(cuid())
+  name                String
+  region              String
+  targetPct           Float    @default(60) @map("target_pct")
+  marketCapacityYL    Int?     @map("market_capacity_yl")   // кол-во ЮЛ в регионе
+  marketCapacityIP    Int?     @map("market_capacity_ip")   // кол-во ИП в регионе
+  marketSharePct      Float?   @map("market_share_pct")     // текущая доля рынка %
+  createdAt           DateTime @default(now()) @map("created_at")
 
   users          User[]
   clients        Client[]
@@ -150,18 +173,21 @@ model User {
   team         TeamType
   branchId     String   @map("branch_id")
   passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
-  supervisorId String?  @map("supervisor_id")  // для SUPERVISOR: кто является руководителем
+  createdAt      DateTime @default(now()) @map("created_at")
+  supervisorId   String?  @map("supervisor_id")  // для SUPERVISOR: кто является руководителем
+  planMonthly    Int?     @map("plan_monthly")    // план новых клиентов в месяц
+  telegramChatId String?  @map("telegram_chat_id") // персональный Telegram chat_id для алертов
 
   branch        Branch     @relation(fields: [branchId], references: [id])
   supervisor    User?      @relation("UserHierarchy", fields: [supervisorId], references: [id])
   subordinates  User[]     @relation("UserHierarchy")
-  managedClients Client[]  @relation("ClientManager")
-  kamClients     Client[]  @relation("ClientKAM")
-  activities    Activity[]
-  tasks         Task[]
-  deals         Deal[]
-  changelogs    Changelog[]
+  managedClients    Client[]   @relation("ClientManager")
+  kamClients        Client[]   @relation("ClientKAM")
+  activities        Activity[]
+  tasks             Task[]
+  deals             Deal[]
+  changelogs        Changelog[]
+  monthlySnapshots  ManagerMonthlySnapshot[]
 
   @@map("users")
 }
@@ -181,6 +207,7 @@ model Client {
   sizeCategory     ClientSizeCategory? @map("size_category")   // вычисляется RFM-sync
   activatedAt      DateTime?           @map("activated_at")    // дата первого перехода в ACTIVATE
   handoffDoneAt    DateTime?           @map("handoff_done_at") // дата передачи фермеру; null = ещё не передан
+  firstTxnAt       DateTime?           @map("first_txn_at")   // дата первой транзакции (set once)
   daysSinceLastTxn Int                @default(0) @map("days_since_last_txn")
   txnCount30d      Int        @default(0) @map("txn_count_30d")
   gmv30d           Float      @default(0) @map("gmv_30d")
@@ -212,6 +239,8 @@ model Client {
   changelogs     Changelog[]
   contactPersons ContactPerson[]
   accountPlan    AccountPlan?
+  kycChecklist   KYCChecklist[]
+  merchants      Merchant[]
 
   @@map("clients")
 }
@@ -250,16 +279,20 @@ model AccountPlan {
 model Activity {
   id          String       @id @default(cuid())
   clientId    String       @map("client_id")
+  dealId      String?      @map("deal_id")        // привязка к сделке (опц.)
   type        ActivityType
   product     String?      // MBUSINESS | MKASSA_POS | MKASSA_QR | ACQUIRING | SALARY_PROJECT | PAYROLL | CORPORATE_CARD | CREDIT | DEPOSIT | TRADE_FINANCE
   result      String
   notes       String?
+  isPlanned   Boolean      @default(false) @map("is_planned")
+  completedAt DateTime?    @map("completed_at")
   performedBy String       @map("performed_by")
   performedAt DateTime     @map("performed_at")
   createdAt   DateTime     @default(now()) @map("created_at")
 
-  client Client @relation(fields: [clientId], references: [id])
-  user   User   @relation(fields: [performedBy], references: [id])
+  client Client  @relation(fields: [clientId], references: [id])
+  user   User    @relation(fields: [performedBy], references: [id])
+  deal   Deal?   @relation(fields: [dealId], references: [id])
 
   @@map("activities")
 }
@@ -294,14 +327,16 @@ model Deal {
   amount        Float?
   probability   Int?
   expectedClose DateTime?  @map("expected_close")
-  lostReason    String?    @map("lost_reason")
+  lostReason    String?          @map("lost_reason")
+  lostReasonCode DealLostReason? @map("lost_reason_code")
   notes         String?
   status        DealStatus @default(ACTIVE)
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
 
-  client Client? @relation(fields: [clientId], references: [id])
-  owner  User    @relation(fields: [ownerId], references: [id])
+  client     Client?    @relation(fields: [clientId], references: [id])
+  owner      User       @relation(fields: [ownerId], references: [id])
+  activities Activity[]
 
   @@map("deals")
 }
@@ -357,6 +392,59 @@ model PortfolioSnapshot {
 
   @@unique([snapshotDate, team])
   @@map("portfolio_snapshots")
+}
+
+// ─── Мерчанты (MKassa терминалы) ─────────────────────────
+model Merchant {
+  id           String   @id @default(cuid())
+  clientId     String   @map("client_id")
+  terminalId   String   @unique @map("terminal_id")
+  type         String   // POS | QR | KKM
+  status       String   @default("ACTIVE")  // ACTIVE | INACTIVE | BLOCKED
+  lastTxnDate  DateTime? @map("last_txn_date")
+  txnCount30d  Int      @default(0) @map("txn_count_30d")
+  isPhantom    Boolean  @default(false) @map("is_phantom")  // daysSinceLastTxn >= 90 AND txnCount30d = 0
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@map("merchants")
+}
+
+// ─── Ежемесячный снапшот KPI менеджера ───────────────────
+model ManagerMonthlySnapshot {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  year            Int
+  month           Int      // 1-12
+  plannedClients  Int      @default(0) @map("planned_clients")
+  actualClients   Int      @default(0) @map("actual_clients")
+  activationRate  Float    @default(0) @map("activation_rate")
+  activitiesCount Int      @default(0) @map("activities_count")
+  activations     Int      @default(0)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, year, month])
+  @@map("manager_monthly_snapshots")
+}
+
+// ─── KYC Чеклист ─────────────────────────────────────────
+model KYCChecklist {
+  id         String        @id @default(cuid())
+  clientId   String        @map("client_id")
+  item       String        // INN_CONFIRMED | CHARTER | PASSPORT_DIRECTOR | BENEFICIAL_OWNER | TAX_REG | AML_CLEAR | ADDRESS_CONFIRMED
+  status     KYCItemStatus @default(PENDING)
+  note       String?
+  updatedBy  String?       @map("updated_by")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, item])
+  @@map("kyc_checklist")
 }
 
 // ─── КП-шаблоны (M5) ─────────────────────────────────────

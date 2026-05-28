@@ -16,6 +16,8 @@ type Props = {
     team?: string;
     branchId?: string;
     supervisorId?: string | null;
+    planMonthly?: number | null;
+    telegramChatId?: string | null;
   };
   isEdit?: boolean;
   branches: Branch[];
@@ -173,6 +175,36 @@ export function UserForm({ action, initialValues = {}, isEdit = false, branches,
             </option>
           ))}
         </select>
+      </div>
+
+      {/* Telegram + план */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1.5">
+            Telegram Chat ID
+            <span className="text-gray-400 font-normal ml-1">(для персональных алертов)</span>
+          </label>
+          <input
+            name="telegramChatId"
+            type="text"
+            defaultValue={initialValues.telegramChatId ?? ""}
+            placeholder="123456789"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mbank-green)] focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1.5">
+            План новых клиентов / месяц
+          </label>
+          <input
+            name="planMonthly"
+            type="number"
+            min="0"
+            defaultValue={initialValues.planMonthly ?? ""}
+            placeholder="10"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mbank-green)] focus:border-transparent"
+          />
+        </div>
       </div>
 
       {error && (

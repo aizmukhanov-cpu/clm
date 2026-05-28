@@ -25,13 +25,16 @@ export async function createUser(
   const guard   = adminOnly(session);
   if (guard) return guard;
 
-  const name         = (formData.get("name")         as string)?.trim();
-  const email        = (formData.get("email")        as string)?.trim().toLowerCase();
-  const password     = (formData.get("password")     as string)?.trim();
-  const role         = (formData.get("role")         as string) as UserRole;
-  const team         = (formData.get("team")         as string) as TeamType;
-  const branchId     = (formData.get("branchId")     as string)?.trim();
-  const supervisorId = (formData.get("supervisorId") as string)?.trim() || null;
+  const name           = (formData.get("name")           as string)?.trim();
+  const email          = (formData.get("email")          as string)?.trim().toLowerCase();
+  const password       = (formData.get("password")       as string)?.trim();
+  const role           = (formData.get("role")           as string) as UserRole;
+  const team           = (formData.get("team")           as string) as TeamType;
+  const branchId       = (formData.get("branchId")       as string)?.trim();
+  const supervisorId   = (formData.get("supervisorId")   as string)?.trim() || null;
+  const planMonthlyRaw = (formData.get("planMonthly")    as string)?.trim();
+  const telegramChatId = (formData.get("telegramChatId") as string)?.trim() || null;
+  const planMonthly    = planMonthlyRaw ? parseInt(planMonthlyRaw, 10) : null;
 
   if (!name)                         return "Укажите имя";
   if (!email)                        return "Укажите email";
@@ -46,7 +49,7 @@ export async function createUser(
   const passwordHash = await hash(password, 10);
 
   await db.user.create({
-    data: { name, email, role, team, branchId, passwordHash, supervisorId },
+    data: { name, email, role, team, branchId, passwordHash, supervisorId, planMonthly, telegramChatId },
   });
 
   revalidatePath("/admin/users");
@@ -64,13 +67,16 @@ export async function updateUser(
   const guard   = adminOnly(session);
   if (guard) return guard;
 
-  const name         = (formData.get("name")         as string)?.trim();
-  const email        = (formData.get("email")        as string)?.trim().toLowerCase();
-  const password     = (formData.get("password")     as string)?.trim();
-  const role         = (formData.get("role")         as string) as UserRole;
-  const team         = (formData.get("team")         as string) as TeamType;
-  const branchId     = (formData.get("branchId")     as string)?.trim();
-  const supervisorId = (formData.get("supervisorId") as string)?.trim() || null;
+  const name           = (formData.get("name")           as string)?.trim();
+  const email          = (formData.get("email")          as string)?.trim().toLowerCase();
+  const password       = (formData.get("password")       as string)?.trim();
+  const role           = (formData.get("role")           as string) as UserRole;
+  const team           = (formData.get("team")           as string) as TeamType;
+  const branchId       = (formData.get("branchId")       as string)?.trim();
+  const supervisorId   = (formData.get("supervisorId")   as string)?.trim() || null;
+  const planMonthlyRaw = (formData.get("planMonthly")    as string)?.trim();
+  const telegramChatId = (formData.get("telegramChatId") as string)?.trim() || null;
+  const planMonthly    = planMonthlyRaw ? parseInt(planMonthlyRaw, 10) : null;
 
   if (!name)                       return "Укажите имя";
   if (!email)                      return "Укажите email";
@@ -83,7 +89,7 @@ export async function updateUser(
   if (conflict) return `Email ${email} уже используется другим пользователем`;
 
   const data: Record<string, unknown> = {
-    name, email, role, team, branchId, supervisorId,
+    name, email, role, team, branchId, supervisorId, planMonthly, telegramChatId,
   };
 
   if (password) {
@@ -95,6 +101,115 @@ export async function updateUser(
 
   revalidatePath("/admin/users");
   redirect("/admin/users");
+}
+
+/* ─── EMERGENCY PORTFOLIO REASSIGNMENT (#5 P1) ──────────── */
+
+export async function reassignPortfolio(
+  _prev: string | null,
+  formData: FormData,
+): Promise<string | null> {
+  const session = await getSession();
+  if (!session || !["ADMIN", "DIRECTOR"].includes(session.role)) {
+    return "Недостаточно прав";
+  }
+
+  const fromUserId = (formData.get("fromUserId") as string)?.trim();
+  const mode       = (formData.get("mode") as string)?.trim(); // "specific" | "auto"
+  const toUserId   = (formData.get("toUserId") as string)?.trim() || null;
+
+  if (!fromUserId) return "Выберите менеджера-источника";
+
+  const fromUser = await db.user.findUnique({
+    where: { id: fromUserId },
+    include: {
+      managedClients: { where: { isArchived: false }, select: { id: true } },
+      kamClients:     { where: { isArchived: false }, select: { id: true } },
+      branch:         { select: { id: true } },
+    },
+  });
+  if (!fromUser) return "Менеджер не найден";
+
+  const clientIds = [
+    ...fromUser.managedClients.map(c => c.id),
+    ...fromUser.kamClients.map(c => c.id),
+  ];
+  if (clientIds.length === 0) return "У менеджера нет клиентов для перераспределения";
+
+  if (mode === "specific") {
+    if (!toUserId) return "Выберите получателя";
+    const toUser = await db.user.findUnique({ where: { id: toUserId }, select: { id: true, role: true } });
+    if (!toUser) return "Получатель не найден";
+
+    // Переназначаем всех клиентов на одного получателя
+    await db.client.updateMany({
+      where: { managerId: fromUserId },
+      data:  { managerId: toUserId },
+    });
+    await db.client.updateMany({
+      where: { kamId: fromUserId },
+      data:  { kamId: toUserId },
+    });
+
+    // Журналируем
+    const changes = clientIds.map(clientId => ({
+      clientId,
+      changedBy: session.id,
+      field:     "managerId",
+      oldVal:    fromUserId,
+      newVal:    toUserId,
+    }));
+    await db.changelog.createMany({ data: changes });
+
+  } else {
+    // Авто-балансировка: найти менеджеров с минимальной нагрузкой в том же филиале
+    const candidates = await db.user.findMany({
+      where: {
+        role:     { in: ["SPECIALIST", "KAM"] },
+        branchId: fromUser.branch.id,
+        id:       { not: fromUserId },
+      },
+      include: {
+        _count: { select: { managedClients: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (candidates.length === 0) {
+      return "Нет доступных менеджеров в том же филиале для авто-балансировки";
+    }
+
+    // Распределяем клиентов round-robin по кандидатам (сортировка по нагрузке)
+    const sorted = [...candidates].sort(
+      (a, b) => a._count.managedClients - b._count.managedClients
+    );
+
+    for (let i = 0; i < clientIds.length; i++) {
+      const target = sorted[i % sorted.length];
+      await db.client.update({
+        where: { id: clientIds[i] },
+        data:  {
+          managerId: fromUser.managedClients.some(c => c.id === clientIds[i])
+            ? target.id : undefined,
+          kamId: fromUser.kamClients.some(c => c.id === clientIds[i])
+            ? target.id : undefined,
+        },
+      });
+      await db.changelog.create({
+        data: {
+          clientId:  clientIds[i],
+          changedBy: session.id,
+          field:     "managerId",
+          oldVal:    fromUserId,
+          newVal:    target.id,
+        },
+      });
+    }
+  }
+
+  revalidatePath("/admin/users");
+  revalidatePath("/clients");
+  return null;
 }
 
 /* ─── DELETE (soft: reassign clients first) ─────────────── */

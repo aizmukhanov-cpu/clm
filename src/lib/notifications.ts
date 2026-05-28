@@ -26,6 +26,17 @@ export async function sendNotification(
   await Promise.allSettled(promises);
 }
 
+// Отправить уведомление конкретному пользователю (по его telegramChatId)
+export async function sendUserNotification(
+  chatId: string,
+  message: string,
+  opts: { silent?: boolean } = {}
+): Promise<void> {
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!tgToken) return;
+  await sendTelegram(tgToken, chatId, message, opts.silent).catch(console.error);
+}
+
 // ── Telegram Bot API ────────────────────────────────────
 async function sendTelegram(
   token: string,

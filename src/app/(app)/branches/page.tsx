@@ -216,14 +216,20 @@ export default async function BranchesPage() {
             ))}
           </div>
 
-          {/* Ссылка на клиентов */}
-          <div className="px-6 py-3 bg-gray-50/60 border-t border-gray-50 flex justify-end">
+          {/* Ссылка на клиентов + дашборд */}
+          <div className="px-6 py-3 bg-gray-50/60 border-t border-gray-50 flex items-center justify-between">
             <Link
-              href={`/clients?branch=${b.id}`}
-              className="text-xs font-medium hover:underline"
+              href={`/branches/${b.id}`}
+              className="text-xs font-semibold hover:underline"
               style={{ color: "var(--mbank-green)" }}
             >
-              Клиенты филиала →
+              📊 Дашборд филиала →
+            </Link>
+            <Link
+              href={`/clients?branch=${b.id}`}
+              className="text-xs font-medium text-gray-400 hover:text-gray-600 hover:underline"
+            >
+              Клиенты →
             </Link>
           </div>
         </div>

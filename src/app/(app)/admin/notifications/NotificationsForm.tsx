@@ -205,16 +205,18 @@ TELEGRAM_CHAT_ID=-1001234567890`
 
       {/* Cron endpoint info */}
       <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-800 space-y-1">
-        <p className="font-semibold">Автоматизация через cron (ночной запуск)</p>
-        <p>Настройте ежедневный вызов всех трёх endpoint'ов с заголовком <code className="font-mono bg-amber-100 px-1 rounded">Authorization: Bearer $CRON_SECRET</code>:</p>
+        <p className="font-semibold">Автоматизация через cron</p>
+        <p>Настройте вызов endpoint'ов с заголовком <code className="font-mono bg-amber-100 px-1 rounded">Authorization: Bearer $CRON_SECRET</code>:</p>
         <pre className="bg-amber-100 rounded p-2 text-[11px] font-mono mt-1 overflow-x-auto">{
-`POST /api/cron/rfm-sync          — 03:00 ежедневно (когорты, стадии, sizeCategory)
-POST /api/cron/event-triggers    — 03:05 ежедневно (автозадачи)
-POST /api/cron/handoff           — 03:10 ежедневно (передача B2B/KM → BRANCH/VB/KAM)
-POST /api/cron/escalate          — 08:00 ежедневно (просроченные задачи)
-POST /api/cron/reminders         — 09:00 ежедневно (напоминания на завтра)`
+`POST /api/cron/rfm-sync          — 03:00 ежедневно
+POST /api/cron/event-triggers    — 03:05 ежедневно (автозадачи + ghosting + QBR + ничейные)
+POST /api/cron/handoff           — 03:10 ежедневно
+POST /api/cron/escalate          — 08:00 ежедневно
+POST /api/cron/reminders         — 09:00 ежедневно
+POST /api/cron/midmonth-alert    — 09:10 каждое 15-е число (план/факт)
+POST /api/cron/monthly-snapshot  — 04:00 каждое 1-е число (снапшот KPI)`
         }</pre>
-        <p className="text-amber-700/60">Через Vercel Cron Jobs, GitHub Actions Schedule или внешний планировщик.</p>
+        <p className="text-amber-700/60">vercel.json уже содержит все расписания. При деплое на Vercel — работает автоматически.</p>
       </div>
     </div>
   );

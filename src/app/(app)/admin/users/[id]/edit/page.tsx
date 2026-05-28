@@ -16,7 +16,7 @@ export default async function EditUserPage({ params }: { params: Params }) {
   const [user, branches, supervisors] = await Promise.all([
     db.user.findUnique({
       where:  { id },
-      select: { id: true, name: true, email: true, role: true, team: true, branchId: true, supervisorId: true },
+      select: { id: true, name: true, email: true, role: true, team: true, branchId: true, supervisorId: true, planMonthly: true, telegramChatId: true },
     }),
     db.branch.findMany({ select: { id: true, name: true, region: true }, orderBy: { name: "asc" } }),
     db.user.findMany({
@@ -45,12 +45,14 @@ export default async function EditUserPage({ params }: { params: Params }) {
           action={action}
           isEdit
           initialValues={{
-            name:         user.name,
-            email:        user.email,
-            role:         user.role,
-            team:         user.team,
-            branchId:     user.branchId,
-            supervisorId: user.supervisorId,
+            name:          user.name,
+            email:         user.email,
+            role:          user.role,
+            team:          user.team,
+            branchId:      user.branchId,
+            supervisorId:  user.supervisorId,
+            planMonthly:   user.planMonthly,
+            telegramChatId: user.telegramChatId,
           }}
           branches={branches}
           supervisors={supervisors}

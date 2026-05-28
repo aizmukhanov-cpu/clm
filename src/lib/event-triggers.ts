@@ -46,9 +46,25 @@ type ClientRow = {
   managerId:        string | null;
   kamId:            string | null;
   activities:       { performedAt: Date }[];
+  accountPlan:      { nextMeeting: Date | null } | null;
 };
 
 const TRIGGER_RULES: TriggerRule[] = [
+  // ── НИЧЕЙНЫЕ КЛИЕНТЫ (#1 P1) ─────────────────────────────
+  {
+    id:       "unowned-client",
+    name:     "Клиент без ответственного",
+    priority: "P1",
+    condition: (c, existing) =>
+      c.clmStage !== "ACQUIRE" &&
+      !c.managerId &&
+      !c.kamId &&
+      !existing.includes("unowned-client"),
+    action:   "⚠️ НИЧЕЙНЫЙ КЛИЕНТ: нет ответственного менеджера. Назначить менеджера срочно",
+    daysUntilDue: 0,
+    assignTo: () => null, // will be assigned to admin in runEventTriggers
+  },
+
   // ── РЕАКТИВАЦИЯ ─────────────────────────────────────────
   {
     id:       "reactivation-30d",
@@ -138,6 +154,21 @@ const TRIGGER_RULES: TriggerRule[] = [
     assignTo: (c) => c.kamId ?? c.managerId,
   },
 
+  // ── QBR ПРОСРОЧЕН (#9 P2) ────────────────────────────────
+  {
+    id:       "qbr-overdue",
+    name:     "QBR просрочен — запланировать встречу",
+    priority: "P2",
+    condition: (c, existing) => {
+      if (!c.kamId) return false;
+      if (existing.includes("qbr-overdue")) return false;
+      return (c as ClientRow & { accountPlanOverdue?: boolean }).accountPlanOverdue === true;
+    },
+    action:   "QBR просрочен: запланировать Account Review встречу в течение 7 дней",
+    daysUntilDue: 7,
+    assignTo: (c) => c.kamId,
+  },
+
   // ── МЕНЕДЖЕР НЕ КАСАЛСЯ КЛИЕНТА ──────────────────────────
   {
     id:       "no-touch-30d",
@@ -161,7 +192,14 @@ const TRIGGER_RULES: TriggerRule[] = [
 export async function runEventTriggers(): Promise<TriggerResult> {
   const result: TriggerResult = { tasksCreated: 0, triggered: [], errors: [] };
 
+  // Находим первого ADMIN для назначения ничейных клиентов
+  const adminUser = await db.user.findFirst({
+    where: { role: "ADMIN" },
+    select: { id: true },
+  });
+
   // Загружаем всех клиентов с нужными данными
+  const now = new Date();
   const clients = await db.client.findMany({
     where: { isArchived: false },
     include: {
@@ -169,6 +207,9 @@ export async function runEventTriggers(): Promise<TriggerResult> {
         orderBy: { performedAt: "desc" },
         take: 1,
         select: { performedAt: true },
+      },
+      accountPlan: {
+        select: { nextMeeting: true },
       },
     },
   });
@@ -189,16 +230,25 @@ export async function runEventTriggers(): Promise<TriggerResult> {
     existingByClient.get(t.clientId)!.push(t.triggerDay!);
   }
 
-  const now = new Date();
+  let unownedCount = 0;
 
-  for (const client of clients as ClientRow[]) {
+  for (const client of clients as (ClientRow & { accountPlanOverdue?: boolean })[]) {
+    // Пометить клиентов с просроченным QBR
+    if (client.accountPlan?.nextMeeting && client.kamId) {
+      client.accountPlanOverdue = new Date(client.accountPlan.nextMeeting) < now;
+    }
     const existing = existingByClient.get(client.id) ?? [];
 
     for (const rule of TRIGGER_RULES) {
       try {
         if (!rule.condition(client, existing)) continue;
 
-        const assignedTo = rule.assignTo(client);
+        // Для ничейных клиентов — назначаем на ADMIN
+        let assignedTo = rule.assignTo(client);
+        if (!assignedTo && rule.id === "unowned-client") {
+          assignedTo = adminUser?.id ?? null;
+          if (assignedTo) unownedCount++;
+        }
         if (!assignedTo) continue;
 
         // Проверить что пользователь существует
@@ -231,6 +281,14 @@ export async function runEventTriggers(): Promise<TriggerResult> {
     }
   }
 
+  // Отдельное Telegram-уведомление по ничейным клиентам
+  if (unownedCount > 0) {
+    await sendNotification(
+      `🚨 <b>НИЧЕЙНЫЕ КЛИЕНТЫ</b>: ${unownedCount} клиентов без ответственного менеджера!\n` +
+      `Проверьте раздел <b>Администрирование → Ничейные клиенты</b>`
+    );
+  }
+
   // Уведомление если есть P1-триггеры
   const p1 = TRIGGER_RULES.filter(r => r.priority === "P1")
     .flatMap(r => result.triggered.filter(t => t.includes(r.name)));
@@ -243,5 +301,65 @@ export async function runEventTriggers(): Promise<TriggerResult> {
     );
   }
 
+  // ── Ghosting auto-close для Pipeline (#7 P2) ─────────────
+  await runGhostingTrigger(result);
+
   return result;
+}
+
+/** Detects stale deals (21+ days no activity, no open tasks) and creates P2 task */
+async function runGhostingTrigger(result: TriggerResult): Promise<void> {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 21);
+
+  const staleDeals = await db.deal.findMany({
+    where: {
+      status:    "ACTIVE",
+      updatedAt: { lt: cutoff },
+    },
+    include: {
+      owner:  { select: { id: true, name: true } },
+      client: { select: { id: true, name: true } },
+    },
+  });
+
+  const now = new Date();
+
+  for (const deal of staleDeals) {
+    try {
+      // Check if already has a ghosting task
+      const existing = await db.task.findFirst({
+        where: {
+          assignedTo: deal.ownerId,
+          triggerDay: "ghosting-auto-close",
+          status:     { in: ["PENDING", "OVERDUE"] },
+          // Привязываем к клиенту сделки если есть
+          ...(deal.clientId ? { clientId: deal.clientId } : {}),
+        },
+      });
+      if (existing) continue;
+
+      // Need a clientId for the task
+      if (!deal.clientId) continue;
+
+      const dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() + 3);
+
+      await db.task.create({
+        data: {
+          clientId:   deal.clientId,
+          triggerDay: "ghosting-auto-close",
+          assignedTo: deal.ownerId,
+          dueDate,
+          priority:   "P2",
+          action:     `Ghosting: сделка "${deal.leadName ?? deal.client?.name ?? "—"}" без активности 21+ дней. Закрыть или подтвердить активность.`,
+        },
+      });
+
+      result.tasksCreated++;
+      result.triggered.push(`${deal.client?.name ?? deal.leadName ?? deal.id} → Ghosting auto-close`);
+    } catch (e) {
+      result.errors.push(`deal/${deal.id}/ghosting: ${String(e)}`);
+    }
+  }
 }

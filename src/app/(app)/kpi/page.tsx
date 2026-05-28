@@ -247,6 +247,12 @@ export default async function KPIPage() {
             {month} · нажмите на команду чтобы раскрыть менеджеров
           </p>
         </div>
+        <a
+          href="/kpi/funnel"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:border-[var(--mbank-green)] hover:text-[var(--mbank-green)] transition-colors"
+        >
+          📊 Воронка Pipeline
+        </a>
       </div>
 
       {/* Grand totals */}

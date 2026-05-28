@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { DeleteUserButton } from "./DeleteUserButton";
 import { AdminTabBar } from "../AdminTabBar";
+import { ReassignPortfolioModal } from "./ReassignPortfolioModal";
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN:      "Admin",
@@ -56,13 +57,21 @@ export default async function AdminUsersPage() {
 
       <div className="flex items-center justify-between">
         <AdminTabBar active="/admin/users" />
-        <Link
-          href="/admin/users/new"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          style={{ background: "var(--mbank-green)" }}
-        >
-          + Добавить сотрудника
-        </Link>
+        <div className="flex items-center gap-3">
+          <ReassignPortfolioModal users={users.map(u => ({
+            id: u.id,
+            name: u.name,
+            team: u.team,
+            _count: u._count,
+          }))} />
+          <Link
+            href="/admin/users/new"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: "var(--mbank-green)" }}
+          >
+            + Добавить сотрудника
+          </Link>
+        </div>
       </div>
 
       {/* Table */}

@@ -1,0 +1,11 @@
+{
+  "crons": [
+    { "path": "/api/cron/rfm-sync",         "schedule": "0 3 * * *"   },
+    { "path": "/api/cron/event-triggers",   "schedule": "5 3 * * *"   },
+    { "path": "/api/cron/handoff",          "schedule": "10 3 * * *"  },
+    { "path": "/api/cron/escalate",         "schedule": "0 8 * * *"   },
+    { "path": "/api/cron/reminders",        "schedule": "0 9 * * *"   },
+    { "path": "/api/cron/midmonth-alert",   "schedule": "10 9 15 * *" },
+    { "path": "/api/cron/monthly-snapshot", "schedule": "0 4 1 * *"   }
+  ]
+}

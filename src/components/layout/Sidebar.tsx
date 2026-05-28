@@ -82,7 +82,13 @@ function getSpecialistNav(team: string, portfolioLabel: string): NavItem[] {
   return [
     { label: portfolioLabel, href: "/my-portfolio", icon: FolderKanban },
     tasks,
-    { label: "KPI",          href: "/kpi",          icon: BarChart2 },
+    {
+      label: "KPI", href: "/kpi", icon: BarChart2,
+      children: [
+        { label: "Мой KPI",        href: "/kpi"             },
+        { label: "🏆 Достижения",  href: "/kpi/leaderboard" },
+      ],
+    },
   ];
 }
 
@@ -109,7 +115,14 @@ function getNav(role: string, team: string): NavItem[] {
       { label: "KAM Портфель",    href: "/kam",             icon: Briefcase },
       { label: "Реактивация",     href: "/reactivation",    icon: RotateCcw },
       { label: "Филиалы",         href: "/branches",        icon: Building2 },
-      { label: "KPI",             href: "/kpi",             icon: BarChart2 },
+      {
+        label: "KPI", href: "/kpi", icon: BarChart2,
+        children: [
+          { label: "Обзор команд",   href: "/kpi"              },
+          { label: "Воронка",        href: "/kpi/funnel"        },
+          { label: "🏆 Рейтинг",    href: "/kpi/leaderboard"  },
+        ],
+      },
     ];
   }
 
@@ -121,7 +134,14 @@ function getNav(role: string, team: string): NavItem[] {
       { label: "KAM Портфель",    href: "/kam",          icon: Briefcase },
       { label: "Реактивация",     href: "/reactivation", icon: RotateCcw },
       { label: "Филиалы",         href: "/branches",     icon: Building2 },
-      { label: "KPI",             href: "/kpi",          icon: BarChart2 },
+      {
+        label: "KPI", href: "/kpi", icon: BarChart2,
+        children: [
+          { label: "Обзор команд",  href: "/kpi"             },
+          { label: "Воронка",       href: "/kpi/funnel"       },
+          { label: "🏆 Рейтинг",   href: "/kpi/leaderboard" },
+        ],
+      },
     ];
   }
 
@@ -133,7 +153,14 @@ function getNav(role: string, team: string): NavItem[] {
       { label: "Activation Desk", href: "/activation-desk", icon: CheckSquare },
       { label: "Реактивация",     href: "/reactivation",    icon: RotateCcw },
       { label: "Филиалы",         href: "/branches",        icon: Building2 },
-      { label: "KPI",             href: "/kpi",             icon: BarChart2 },
+      {
+        label: "KPI", href: "/kpi", icon: BarChart2,
+        children: [
+          { label: "Обзор",          href: "/kpi"             },
+          { label: "Воронка",        href: "/kpi/funnel"       },
+          { label: "🏆 Рейтинг",   href: "/kpi/leaderboard" },
+        ],
+      },
     ];
   }
 
@@ -178,7 +205,13 @@ function getNav(role: string, team: string): NavItem[] {
       { label: "Мои задачи",      href: "/my-tasks",        icon: ClipboardList },
       { label: "KAM Портфель",    href: "/kam",             icon: Briefcase },
       { label: "Activation Desk", href: "/activation-desk", icon: CheckSquare },
-      { label: "KPI",             href: "/kpi",             icon: BarChart2 },
+      {
+        label: "KPI", href: "/kpi", icon: BarChart2,
+        children: [
+          { label: "Мой KPI",        href: "/kpi"             },
+          { label: "🏆 Достижения",  href: "/kpi/leaderboard" },
+        ],
+      },
     ];
   }
 
