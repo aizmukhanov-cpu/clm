@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { updateKYCItem, KYC_ITEMS, type KYCRow } from "@/lib/actions/kyc";
+import { updateKYCItem, type KYCRow } from "@/lib/actions/kyc";
+import { KYC_ITEMS } from "@/lib/kyc-config";
 
 const STATUS_CONFIG = {
   DONE:    { label: "✅ Готово",    bg: "#dcfce7", text: "#15803d" },
