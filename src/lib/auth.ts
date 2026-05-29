@@ -7,19 +7,23 @@ const secret = new TextEncoder().encode(
   process.env.JWT_SECRET ?? "fallback-secret-change-me"
 );
 
+/** После скольки секунд сессия перепроверяется по БД */
+const SESSION_RECHECK_SECONDS = 60 * 60; // 1 час
+
 export type SessionUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  team: string;
-  branchId: string;
+  id:             string;
+  name:           string;
+  email:          string;
+  role:           string;
+  team:           string;
+  branchId:       string;
+  sessionVersion: number;
 };
 
 export async function createSession(user: SessionUser): Promise<string> {
   return new SignJWT({ ...user })
     .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("8h")
+    .setExpirationTime("4h")   // уменьшено с 8h до 4h
     .setIssuedAt()
     .sign(secret);
 }
@@ -31,7 +35,7 @@ export async function setSessionCookie(token: string) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 8, // 8 hours
+    maxAge: 60 * 60 * 4, // 4 hours — синхронизировано с JWT TTL
   });
 }
 
@@ -44,9 +48,26 @@ export async function getSession(): Promise<SessionUser | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
+
   try {
     const { payload } = await jwtVerify(token, secret);
-    return payload as unknown as SessionUser;
+    const session = payload as unknown as SessionUser & { iat?: number };
+
+    // Перепроверяем по БД если токен старше SESSION_RECHECK_SECONDS
+    // (ловим: смену роли/пароля администратором, удаление пользователя)
+    const ageSeconds = Math.floor(Date.now() / 1000) - (session.iat ?? 0);
+    if (ageSeconds > SESSION_RECHECK_SECONDS) {
+      const fresh = await db.user.findUnique({
+        where:  { id: session.id },
+        select: { id: true, sessionVersion: true },
+      });
+      // Пользователь удалён или sessionVersion изменился (смена роли/пароля)
+      if (!fresh || fresh.sessionVersion !== (session.sessionVersion ?? 0)) {
+        return null;
+      }
+    }
+
+    return session;
   } catch {
     return null;
   }

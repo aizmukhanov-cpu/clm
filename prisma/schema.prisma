@@ -175,8 +175,13 @@ model User {
   passwordHash String   @map("password_hash")
   createdAt      DateTime @default(now()) @map("created_at")
   supervisorId   String?  @map("supervisor_id")  // для SUPERVISOR: кто является руководителем
-  planMonthly    Int?     @map("plan_monthly")    // план новых клиентов в месяц
-  telegramChatId String?  @map("telegram_chat_id") // персональный Telegram chat_id для алертов
+  planMonthly         Int?      @map("plan_monthly")          // план новых клиентов в месяц
+  telegramChatId      String?   @map("telegram_chat_id")       // персональный Telegram chat_id для алертов
+
+  // ── Security ──────────────────────────────────────────────────────────────
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")           // брутфорс-блокировка до этого времени
+  sessionVersion      Int       @default(0) @map("session_version") // инкрементируется при смене роли/пароля
 
   branch        Branch     @relation(fields: [branchId], references: [id])
   supervisor    User?      @relation("UserHierarchy", fields: [supervisorId], references: [id])

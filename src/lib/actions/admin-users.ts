@@ -88,13 +88,27 @@ export async function updateUser(
   const conflict = await db.user.findFirst({ where: { email, NOT: { id: userId } } });
   if (conflict) return `Email ${email} уже используется другим пользователем`;
 
+  // Fetch current values to detect role/password change → bump sessionVersion
+  const current = await db.user.findUnique({
+    where:  { id: userId },
+    select: { role: true, sessionVersion: true },
+  });
+
   const data: Record<string, unknown> = {
     name, email, role, team, branchId, supervisorId, planMonthly, telegramChatId,
   };
 
+  const roleChanged     = current?.role !== role;
+  const passwordChanged = !!password;
+
   if (password) {
     if (password.length < 6) return "Пароль минимум 6 символов";
     data.passwordHash = await hash(password, 10);
+  }
+
+  // Инвалидируем активные сессии пользователя при смене роли или пароля
+  if (roleChanged || passwordChanged) {
+    data.sessionVersion = (current?.sessionVersion ?? 0) + 1;
   }
 
   await db.user.update({ where: { id: userId }, data });
