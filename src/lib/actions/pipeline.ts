@@ -250,19 +250,29 @@ export async function closeDeal(
               newVal: "ONBOARD",
             },
           });
-          for (const t of onboardTasks) {
-            const due = new Date(now);
-            due.setDate(due.getDate() + t.offset);
-            await tx.task.create({
-              data: {
-                clientId: deal.clientId!,
-                triggerDay: t.day,
-                assignedTo,
-                dueDate: due,
-                priority: t.priority,
-                action: t.action,
-              },
-            });
+          // Защита от дублей: создаём только если нет активных D+ задач
+          const already = await tx.task.count({
+            where: {
+              clientId: deal.clientId!,
+              triggerDay: { in: ["D+1", "D+3", "D+7", "D+14"] },
+              status:     { in: ["PENDING", "OVERDUE"] },
+            },
+          });
+          if (already === 0) {
+            for (const t of onboardTasks) {
+              const due = new Date(now);
+              due.setDate(due.getDate() + t.offset);
+              await tx.task.create({
+                data: {
+                  clientId: deal.clientId!,
+                  triggerDay: t.day,
+                  assignedTo,
+                  dueDate: due,
+                  priority: t.priority,
+                  action: t.action,
+                },
+              });
+            }
           }
         });
       }
