@@ -45,9 +45,15 @@ type ClientRow = {
   hasSalaryProject: boolean;
   managerId:        string | null;
   kamId:            string | null;
+  onboardedAt:      Date | null;
   activities:       { performedAt: Date }[];
   accountPlan:      { nextMeeting: Date | null } | null;
 };
+
+function daysSinceOnboard(c: ClientRow): number {
+  if (!c.onboardedAt) return -1;
+  return Math.floor((Date.now() - new Date(c.onboardedAt).getTime()) / 86_400_000);
+}
 
 const TRIGGER_RULES: TriggerRule[] = [
   // ── НИЧЕЙНЫЕ КЛИЕНТЫ (#1 P1) ─────────────────────────────
@@ -63,6 +69,48 @@ const TRIGGER_RULES: TriggerRule[] = [
     action:   "⚠️ НИЧЕЙНЫЙ КЛИЕНТ: нет ответственного менеджера. Назначить менеджера срочно",
     daysUntilDue: 0,
     assignTo: () => null, // will be assigned to admin in runEventTriggers
+  },
+
+  // ── ОНБОРДИНГ: последовательные задачи ──────────────────
+  // Появляются только если клиент всё ещё в ONBOARD без транзакций
+  {
+    id:       "D+3",
+    name:     "Онбординг D+3: нет первой транзакции",
+    priority: "P3",
+    condition: (c, existing) =>
+      c.clmStage === "ONBOARD" &&
+      c.txnCount30d === 0 &&
+      !existing.includes("D+3") &&
+      daysSinceOnboard(c) >= 3,
+    action:      "Первая транзакция? Позвонить, убрать барьер",
+    daysUntilDue: 1,
+    assignTo: (c) => c.managerId,
+  },
+  {
+    id:       "D+7",
+    name:     "Онбординг D+7: всё ещё нет транзакций",
+    priority: "P2",
+    condition: (c, existing) =>
+      c.clmStage === "ONBOARD" &&
+      c.txnCount30d === 0 &&
+      !existing.includes("D+7") &&
+      daysSinceOnboard(c) >= 7,
+    action:      "Нет транзакций — выяснить причину",
+    daysUntilDue: 1,
+    assignTo: (c) => c.managerId,
+  },
+  {
+    id:       "D+14",
+    name:     "Онбординг D+14: эскалация",
+    priority: "P1",
+    condition: (c, existing) =>
+      c.clmStage === "ONBOARD" &&
+      c.txnCount30d === 0 &&
+      !existing.includes("D+14") &&
+      daysSinceOnboard(c) >= 14,
+    action:      "Эскалация — нет транзакций 14 дней, передать в реактивацию",
+    daysUntilDue: 0,
+    assignTo: (c) => c.managerId,
   },
 
   // ── РЕАКТИВАЦИЯ ─────────────────────────────────────────

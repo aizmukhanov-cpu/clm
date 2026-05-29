@@ -212,6 +212,7 @@ model Client {
   sizeCategory     ClientSizeCategory? @map("size_category")   // вычисляется RFM-sync
   activatedAt      DateTime?           @map("activated_at")    // дата первого перехода в ACTIVATE
   handoffDoneAt    DateTime?           @map("handoff_done_at") // дата передачи фермеру; null = ещё не передан
+  onboardedAt      DateTime?           @map("onboarded_at")   // дата входа в ONBOARD (для таймера D+N задач)
   firstTxnAt       DateTime?           @map("first_txn_at")   // дата первой транзакции (set once)
   daysSinceLastTxn Int                @default(0) @map("days_since_last_txn")
   txnCount30d      Int        @default(0) @map("txn_count_30d")

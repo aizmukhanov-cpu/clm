@@ -137,11 +137,15 @@ export async function changeStage(clientId: string, newStage: CLMStage) {
 
   const oldStage = client.clmStage;
 
-  // Транзакция: обновить стадию + записать changelog + создать задачи при ONBOARD
+  // Транзакция: обновить стадию + changelog + D+1 при ONBOARD
   await db.$transaction(async (tx) => {
     await tx.client.update({
       where: { id: clientId },
-      data: { clmStage: newStage },
+      data: {
+        clmStage: newStage,
+        // Фиксируем дату онбординга — нужна event-triggers для D+3/D+7/D+14
+        ...(newStage === CLMStage.ONBOARD ? { onboardedAt: new Date() } : {}),
+      },
     });
 
     await tx.changelog.create({
@@ -154,32 +158,25 @@ export async function changeStage(clientId: string, newStage: CLMStage) {
       },
     });
 
-    // При переходе в ONBOARD → авто-создать Activation Tasks (с защитой от дублей)
+    // При переходе в ONBOARD → только Welcome (D+1).
+    // D+3/D+7/D+14 создаёт event-triggers последовательно, если клиент всё ещё неактивен.
     if (newStage === CLMStage.ONBOARD) {
-      const already = await tx.task.count({
-        where: {
-          clientId,
-          triggerDay: { in: ["D+1", "D+3", "D+7", "D+14"] },
-          status:     { in: ["PENDING", "OVERDUE"] },
-        },
+      const alreadyWelcome = await tx.task.count({
+        where: { clientId, triggerDay: "D+1", status: { in: ["PENDING", "OVERDUE"] } },
       });
-
-      if (already === 0) {
-        const assignedTo = client.managerId ?? session.id;
-        const now = new Date();
-        const tasks = [
-          { day: "D+1",  offset: 1,  priority: "P3" as const, action: "Welcome — помочь с настройкой MBusiness" },
-          { day: "D+3",  offset: 3,  priority: "P3" as const, action: "Первая транзакция? Позвонить, убрать барьер" },
-          { day: "D+7",  offset: 7,  priority: "P2" as const, action: "Нет транзакций — выяснить причину" },
-          { day: "D+14", offset: 14, priority: "P1" as const, action: "Эскалация — нет тр. 14 дней, передать в реактивацию" },
-        ];
-        for (const t of tasks) {
-          const due = new Date(now);
-          due.setDate(due.getDate() + t.offset);
-          await tx.task.create({
-            data: { clientId, triggerDay: t.day, assignedTo, dueDate: due, priority: t.priority, action: t.action },
-          });
-        }
+      if (alreadyWelcome === 0) {
+        const due = new Date();
+        due.setDate(due.getDate() + 1);
+        await tx.task.create({
+          data: {
+            clientId,
+            triggerDay: "D+1",
+            assignedTo:  client.managerId ?? session.id,
+            dueDate:     due,
+            priority:    "P3",
+            action:      "Welcome — помочь с настройкой MBusiness",
+          },
+        });
       }
     }
   });

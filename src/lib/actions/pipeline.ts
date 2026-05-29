@@ -229,17 +229,10 @@ export async function closeDeal(
       });
       if (existing && existing.clmStage === "ACQUIRE") {
         const assignedTo = existing.managerId ?? deal.ownerId;
-        const now = new Date();
-        const onboardTasks = [
-          { day: "D+1",  offset: 1,  priority: "P3" as const, action: "Welcome — помочь с настройкой MBusiness" },
-          { day: "D+3",  offset: 3,  priority: "P3" as const, action: "Первая транзакция? Позвонить, убрать барьер" },
-          { day: "D+7",  offset: 7,  priority: "P2" as const, action: "Нет транзакций — выяснить причину" },
-          { day: "D+14", offset: 14, priority: "P1" as const, action: "Эскалация — нет тр. 14 дней, передать в реактивацию" },
-        ];
         await db.$transaction(async (tx) => {
           await tx.client.update({
             where: { id: deal.clientId! },
-            data: { clmStage: "ONBOARD" },
+            data: { clmStage: "ONBOARD", onboardedAt: new Date() },
           });
           await tx.changelog.create({
             data: {
@@ -250,29 +243,23 @@ export async function closeDeal(
               newVal: "ONBOARD",
             },
           });
-          // Защита от дублей: создаём только если нет активных D+ задач
-          const already = await tx.task.count({
-            where: {
-              clientId: deal.clientId!,
-              triggerDay: { in: ["D+1", "D+3", "D+7", "D+14"] },
-              status:     { in: ["PENDING", "OVERDUE"] },
-            },
+          // Только Welcome D+1; остальные — event-triggers, если клиент неактивен
+          const alreadyWelcome = await tx.task.count({
+            where: { clientId: deal.clientId!, triggerDay: "D+1", status: { in: ["PENDING", "OVERDUE"] } },
           });
-          if (already === 0) {
-            for (const t of onboardTasks) {
-              const due = new Date(now);
-              due.setDate(due.getDate() + t.offset);
-              await tx.task.create({
-                data: {
-                  clientId: deal.clientId!,
-                  triggerDay: t.day,
-                  assignedTo,
-                  dueDate: due,
-                  priority: t.priority,
-                  action: t.action,
-                },
-              });
-            }
+          if (alreadyWelcome === 0) {
+            const due = new Date();
+            due.setDate(due.getDate() + 1);
+            await tx.task.create({
+              data: {
+                clientId:   deal.clientId!,
+                triggerDay: "D+1",
+                assignedTo,
+                dueDate:    due,
+                priority:   "P3",
+                action:     "Welcome — помочь с настройкой MBusiness",
+              },
+            });
           }
         });
       }
@@ -300,46 +287,40 @@ export async function closeDeal(
           });
           if (owner?.branchId) {
             const now = new Date();
-            const onboardTasks = [
-              { day: "D+1",  offset: 1,  priority: "P3" as const, action: "Welcome — помочь с настройкой MBusiness" },
-              { day: "D+3",  offset: 3,  priority: "P3" as const, action: "Первая транзакция? Позвонить, убрать барьер" },
-              { day: "D+7",  offset: 7,  priority: "P2" as const, action: "Нет транзакций — выяснить причину" },
-              { day: "D+14", offset: 14, priority: "P1" as const, action: "Эскалация — нет тр. 14 дней, передать в реактивацию" },
-            ];
             const newClient = await db.$transaction(async (tx) => {
               const c = await tx.client.create({
                 data: {
                   inn,
-                  name: deal.leadName ?? `Клиент ИНН ${inn}`,
-                  type: "YL",
-                  branchId: owner.branchId!,
-                  managerId: deal.ownerId,
-                  clmStage: "ONBOARD",
+                  name:       deal.leadName ?? `Клиент ИНН ${inn}`,
+                  type:       "YL",
+                  branchId:   owner.branchId!,
+                  managerId:  deal.ownerId,
+                  clmStage:   "ONBOARD",
+                  onboardedAt: now,
                 },
               });
               await tx.changelog.create({
                 data: {
-                  clientId: c.id,
+                  clientId:  c.id,
                   changedBy: session.id,
-                  field: "clmStage",
-                  oldVal: null,
-                  newVal: "ONBOARD",
+                  field:     "clmStage",
+                  oldVal:    null,
+                  newVal:    "ONBOARD",
                 },
               });
-              for (const t of onboardTasks) {
-                const due = new Date(now);
-                due.setDate(due.getDate() + t.offset);
-                await tx.task.create({
-                  data: {
-                    clientId: c.id,
-                    triggerDay: t.day,
-                    assignedTo: deal.ownerId,
-                    dueDate: due,
-                    priority: t.priority,
-                    action: t.action,
-                  },
-                });
-              }
+              // Только Welcome D+1; D+3/D+7/D+14 — event-triggers, если клиент неактивен
+              const due = new Date(now);
+              due.setDate(due.getDate() + 1);
+              await tx.task.create({
+                data: {
+                  clientId:   c.id,
+                  triggerDay: "D+1",
+                  assignedTo: deal.ownerId,
+                  dueDate:    due,
+                  priority:   "P3",
+                  action:     "Welcome — помочь с настройкой MBusiness",
+                },
+              });
               return c;
             });
             linkedClientId = newClient.id;
