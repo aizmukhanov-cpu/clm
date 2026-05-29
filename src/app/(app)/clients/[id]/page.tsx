@@ -9,11 +9,9 @@ import { ProductEditor } from "./ProductEditor";
 import { ContactPersons } from "./ContactPersons";
 import { AccountPlanPanel } from "./AccountPlanPanel";
 import { NBAPanel } from "./NBAPanel";
-import { SequenceLauncher } from "./SequenceLauncher";
 import { ClientNotes } from "./ClientNotes";
 import { getHealthScore } from "@/lib/health-score";
 import { getChurnRisk } from "@/lib/churn-risk";
-import { getActiveSequences } from "@/lib/actions/sequences";
 import { getClientNotes } from "@/lib/actions/clients";
 import { getKYCChecklist } from "@/lib/actions/kyc";
 import { KYCPanel } from "./KYCPanel";
@@ -158,8 +156,7 @@ export default async function ClientPage({ params }: { params: Params }) {
     lastActivityDays,
   });
 
-  const [activeSequences, clientNotes, kycRows] = await Promise.all([
-    getActiveSequences(client.id),
+  const [clientNotes, kycRows] = await Promise.all([
     getClientNotes(client.id),
     getKYCChecklist(client.id),
   ]);
@@ -601,13 +598,6 @@ export default async function ClientPage({ params }: { params: Params }) {
 
           {/* ── Next Best Action ── */}
           <NBAPanel client={client} />
-
-          {/* ── Automated Sequences ── */}
-          <SequenceLauncher
-            clientId={client.id}
-            clientStage={client.clmStage}
-            activeSequences={activeSequences}
-          />
 
           {/* Задачи */}
           {perms.tasks ? (

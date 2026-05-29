@@ -120,7 +120,7 @@ const QUICK_LINKS = [
   { href: "/my-portfolio", icon: FolderKanban, label: "Мой портфель",    desc: "Личный портфель, задачи, воронка",   color: "#1A5C38" },
   { href: "/dashboard",    icon: LayoutDashboard, label: "Дашборд",      desc: "Аналитика по всему корпоративному сегменту", color: "#1d4ed8" },
   { href: "/clients",      icon: Users,           label: "Реестр клиентов", desc: "Полная база, фильтры, экспорт",    color: "#374151" },
-  { href: "/activation-desk", icon: CheckSquare,  label: "Activation Desk", desc: "Задачи по активации и последовательности", color: "#d97706" },
+  { href: "/activation-desk", icon: CheckSquare,  label: "Activation Desk", desc: "Задачи по активации клиентов", color: "#d97706" },
   { href: "/pipeline/km",  icon: TrendingUp,      label: "Pipeline КМ",  desc: "Воронка МСБ, КП, шаблоны",          color: "#0891b2" },
   { href: "/pipeline/b2b", icon: TrendingUp,      label: "Pipeline B2B", desc: "Лиды, микро и ИП",                  color: "#7c3aed" },
   { href: "/kam",          icon: Briefcase,       label: "KAM Портфель", desc: "Крупные клиенты, структурные сделки", color: "#be185d" },
@@ -178,7 +178,7 @@ export default async function HomePage() {
 
             <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.60)" }}>
               Единая платформа для команд B2B, КМ, KAM, Virtual Branch и Филиалов.
-              CLM-стадии, задачи, pipeline и автоматические последовательности.
+              CLM-стадии, задачи, pipeline и NBA-рекомендации.
             </p>
 
             <div className="flex items-center gap-2">
