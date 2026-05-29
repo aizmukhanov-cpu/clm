@@ -31,18 +31,22 @@ src/
 │   │   ├── dashboard/             # Дашборд с трендами (sparklines, WoW-дельты)
 │   │   ├── home/                  # Стартовая после логина
 │   │   ├── clients/               # Реестр клиентов + карточка + взаимодействия
+│   │   │   └── [id]/              # Карточка: KYC-чеклист, активности, задачи, КП
 │   │   ├── my-portfolio/          # Портфель текущего пользователя
 │   │   ├── my-tasks/              # Мои задачи
 │   │   ├── activation-desk/       # Очередь активации (ONBOARD)
 │   │   ├── reactivation/          # Очередь реактивации (REACTIVATE/LAPSED)
 │   │   ├── pipeline/              # Сделки B2B / KM (с шаблонами КП)
 │   │   ├── kpi/                   # KPI команд и менеджеров + тренды
+│   │   │   ├── funnel/            # Воронка Pipeline по командам + топ причин потерь
+│   │   │   └── leaderboard/       # Геймификация: рейтинг внутри команд + по филиалам
 │   │   ├── kam/                   # Портфели KAM
-│   │   ├── branches/              # Филиалы + цели по продуктам
+│   │   ├── branches/              # Филиалы
+│   │   │   └── [id]/              # Дашборд директора: цели, KPI менеджеров, доля рынка
 │   │   └── admin/                 # Только ADMIN
-│   │       ├── users/             # CRUD сотрудников
+│   │       ├── users/             # CRUD сотрудников + перераспределение портфеля
 │   │       ├── permissions/       # Матрица доступа ролей
-│   │       ├── products/          # Каталог продуктов + помесячные планы (по филиалам и командам)
+│   │       ├── products/          # Каталог продуктов + помесячные планы
 │   │       ├── clm-rules/         # Просмотр правил CLM
 │   │       ├── kpi/               # Управление KPI
 │   │       └── notifications/     # Telegram + ручной запуск cron
@@ -51,18 +55,21 @@ src/
 │   │   ├── clients/export/        # CSV выгрузка
 │   │   └── cron/                  # Bearer-защищённые задания
 │   │       ├── rfm-sync/          # 03:00 — пересчёт стадий/когорт
-│   │       ├── event-triggers/    # 03:05 — событийные задачи
+│   │       ├── event-triggers/    # 03:05 — событийные задачи + ghosting + QBR
 │   │       ├── handoff/           # 03:10 — Hunter→Farmer передача
 │   │       ├── escalate/          # 08:00 — эскалация просроченных
-│   │       └── reminders/         # 09:00 — Telegram-напоминания
+│   │       ├── reminders/         # 09:00 — Telegram-напоминания
+│   │       ├── midmonth-alert/    # 09:10 каждое 15-е — алерт план/факт
+│   │       └── monthly-snapshot/  # 04:00 каждое 1-е — снапшот KPI менеджеров
 │   └── login/
 ├── lib/
 │   ├── actions/                   # Server Actions
 │   │   ├── clients.ts
-│   │   ├── activities.ts          # Взаимодействия (звонки/встречи/email + продукт)
+│   │   ├── activities.ts          # Взаимодействия (CALL/MEETING/EMAIL/WHATSAPP/VISIT)
 │   │   ├── tasks.ts
 │   │   ├── dashboard.ts           # Данные дашборда + тренды
 │   │   ├── pipeline.ts
+│   │   ├── pipeline-analytics.ts  # Воронка + статистика причин потерь
 │   │   ├── kpi.ts
 │   │   ├── portfolio.ts
 │   │   ├── kam.ts
@@ -74,14 +81,16 @@ src/
 │   │   ├── sequences.ts
 │   │   ├── permissions.ts
 │   │   ├── snapshots.ts           # Ежедневные снапшоты портфеля (тренды)
+│   │   ├── kyc.ts                 # KYC-чеклист клиента (7 пунктов)
+│   │   ├── gamification.ts        # Рейтинги (команды, филиалы) + достижения
 │   │   ├── clm-sync.ts
 │   │   ├── admin-triggers.ts
-│   │   ├── admin-users.ts         # CRUD сотрудников
-│   │   └── admin-products.ts      # Каталог продуктов + планы по филиалам/командам
+│   │   ├── admin-users.ts         # CRUD сотрудников + reassignPortfolio
+│   │   └── admin-products.ts      # Каталог продуктов + планы
 │   ├── clm-rules.ts               # ЕДИНСТВЕННЫЙ источник правил CLM
 │   ├── clm-config.ts
 │   ├── rfm-sync.ts
-│   ├── event-triggers.ts
+│   ├── event-triggers.ts          # Правила: реактивация/кросс-продажи/QBR/ghosting/ничейные
 │   ├── sequences.ts
 │   ├── hunter-handoff.ts          # Hunter→Farmer логика
 │   ├── health-score.ts
@@ -90,9 +99,9 @@ src/
 │   ├── pipeline-config.ts
 │   ├── permissions.ts
 │   ├── permissions-config.ts
-│   ├── product-config.ts          # Константы продуктов и команд (не "use server")
+│   ├── product-config.ts
 │   ├── task-labels.ts
-│   ├── notifications.ts
+│   ├── notifications.ts           # Групповые + персональные Telegram-уведомления
 │   ├── access.ts
 │   ├── auth.ts
 │   └── db.ts
@@ -140,11 +149,62 @@ src/
 
 ### Взаимодействия (Activity)
 
-Каждое взаимодействие (звонок/встреча/email) может быть привязано к конкретному банковскому продукту (`product: String?`). Поле заполняется при создании из карточки клиента.
+Типы: `CALL` / `MEETING` / `EMAIL` / `WHATSAPP` / `VISIT`
+
+Каждое взаимодействие может быть привязано к конкретному продукту и/или сделке (`dealId`). Флаги `isPlanned` / `completedAt` поддерживают плановые активности.
+
+### Событийные триггеры (Event Triggers)
+
+Правила в [src/lib/event-triggers.ts](src/lib/event-triggers.ts), запускаются в 03:05 ежедневно:
+
+| Триггер | Условие | Действие |
+|---|---|---|
+| `unowned-client` | Клиент без менеджера вне стадии ACQUIRE | P1-задача на ADMIN |
+| `reactivation-30d` | 30 дней без транзакций | Задача менеджеру |
+| `reactivation-60d` | 60 дней без транзакций (LAPSED) | Задача менеджеру |
+| `cross-sell` | Нет определённых продуктов в GROW | Задача на кросс-продажу |
+| `qbr-overdue` | AccountPlan.nextMeeting просрочен | Задача на проведение QBR |
+| `ghosting` | Сделка без активности 21+ дней | P2-задача по сделке |
+
+Дедупликация по `triggerDay` — повторный запуск не дублирует задачи.
+
+### KYC-чеклист
+
+На карточке каждого клиента — 7 обязательных пунктов:
+
+| Пункт | Статусы |
+|---|---|
+| ИНН подтверждён | PENDING / DONE / N_A |
+| Устав / учредительные документы | |
+| Паспорт директора | |
+| Бенефициарный владелец | |
+| Свидетельство о налоговой регистрации | |
+| AML-проверка пройдена | |
+| Юридический адрес подтверждён | |
+
+Прогресс-бар показывает % выполненных пунктов. Обновление — прямо на карточке клиента.
+
+### Pipeline: Воронка и причины потерь
+
+`/kpi/funnel` — агрегированная воронка по командам (B2B/KM/BRANCH):
+- Конверсия между стадиями (green ≥50% / amber ≥25% / red <25%)
+- Топ причин потери сделок из `lostReasonCode`
+
+Стандартные коды причин потери: `PRICE`, `COMPETITOR`, `NO_NEED`, `TIMING`, `NO_BUDGET`, `DOCS_MISSING`, `AML_DECLINED`, `CONTACT_LOST`, `OTHER`.
+
+### Мидмесячный алерт (15-е число)
+
+`POST /api/cron/midmonth-alert` — сравнивает фактические активации (1–15 число) с половиной плана:
+- Если факт < 30% от плановой половины → P1-задача менеджеру + личное Telegram-сообщение
+- Итоговая сводка → групповой Telegram-канал
+
+### Снапшот KPI менеджеров (1-е число)
+
+`POST /api/cron/monthly-snapshot` — сохраняет KPI предыдущего месяца в `ManagerMonthlySnapshot` для каждого SPECIALIST/KAM/SUPERVISOR.
 
 ### Health Score, Churn Risk, NBA
 
-Рассчитываются на лету по данным клиента. Источники: [health-score.ts](src/lib/health-score.ts), [churn-risk.ts](src/lib/churn-risk.ts), [nba.ts](src/lib/nba.ts).
+Рассчитываются на лету. Источники: [health-score.ts](src/lib/health-score.ts), [churn-risk.ts](src/lib/churn-risk.ts), [nba.ts](src/lib/nba.ts).
 
 ---
 
@@ -153,15 +213,37 @@ src/
 | Роль | Доступ |
 |---|---|
 | `ADMIN` | Полный доступ + панель администрирования |
-| `DIRECTOR` | Read-only по всем командам + KPI |
-| `ANALYST` | Read-only аналитик |
-| `TEAM_LEAD` | Вся команда (все клиенты команды) |
+| `DIRECTOR` | Read-only по всем командам + KPI + рейтинги |
+| `ANALYST` | Read-only аналитик + рейтинги |
+| `TEAM_LEAD` | Вся команда + рейтинги (все команды) |
 | `SUPERVISOR` | Свои подчинённые (по `supervisorId`) |
-| `SPECIALIST` | Только свои клиенты (`managerId = me`) |
-| `KAM` | Только клиенты, где `kamId = me` |
+| `SPECIALIST` | Только свои клиенты + рейтинг своей команды |
+| `KAM` | Только клиенты, где `kamId = me` + рейтинг своей команды |
 
 Row-level фильтрация: [src/lib/access.ts](src/lib/access.ts).
 Матрица доступа к чувствительным секциям (financials/credit/txn_metrics/…): `/admin/permissions`.
+
+---
+
+## Геймификация
+
+`/kpi/leaderboard` — соревнование **внутри команды** и **между филиалами**:
+
+- **Рейтинг команды**: SPECIALIST/KAM видят только свою команду; ADMIN/DIRECTOR/ANALYST/TEAM_LEAD — все команды
+- **Рейтинг филиалов**: все роли; агрегируется по среднему баллу менеджеров филиала
+- **Очки**: `активации × 10 + контакты + % активации портфеля × 0.5`
+- **Тренд**: ↑/↓/→ относительно прошлого месяца
+
+**Достижения (10 бейджей)** — бронза/серебро/золото на основе активаций, активности и % портфеля. Просроченные задачи снимают бейдж «Нет просрочек».
+
+---
+
+## Дашборд директора филиала
+
+`/branches/[id]` — доступен ADMIN / DIRECTOR / ANALYST / TEAM_LEAD своего филиала:
+- Целевые показатели по продуктам: план / факт / % / прогресс-бар
+- Доля рынка (если заполнено `marketSharePct`)
+- Таблица менеджеров: клиенты, активации, % плана, контакты, просроченные задачи
 
 ---
 
@@ -172,10 +254,12 @@ Row-level фильтрация: [src/lib/access.ts](src/lib/access.ts).
 | Эндпоинт | Расписание | Действие |
 |---|---|---|
 | `POST /api/cron/rfm-sync` | `0 3 * * *` | Пересчёт RFM-D, стадии, когорты, sizeCategory; захват PortfolioSnapshot |
-| `POST /api/cron/event-triggers` | `5 3 * * *` | Задачи по событийным правилам |
+| `POST /api/cron/event-triggers` | `5 3 * * *` | Задачи по событийным правилам + ghosting + QBR + ничейные клиенты |
 | `POST /api/cron/handoff` | `10 3 * * *` | Hunter→Farmer передача |
 | `POST /api/cron/escalate` | `0 8 * * *` | Эскалация P1/P2 просроченных >7д |
 | `POST /api/cron/reminders` | `0 9 * * *` | Telegram-напоминания |
+| `POST /api/cron/midmonth-alert` | `10 9 15 * *` | Алерт план/факт по активациям (15-е число) |
+| `POST /api/cron/monthly-snapshot` | `0 4 1 * *` | Снапшот KPI менеджеров (1-е число) |
 
 ---
 
@@ -187,20 +271,23 @@ Prisma-схема: [prisma/schema.prisma](prisma/schema.prisma)
 
 | Модель | Назначение |
 |---|---|
-| `Client` | Клиент с RFM-полями, стадией, когортой |
-| `User` | Сотрудник (7 ролей, 5 команд) |
-| `Branch` | Филиал |
-| `Activity` | Взаимодействие (звонок/встреча/email), опц. привязка к продукту |
+| `Client` | Клиент с RFM-полями, стадией, когортой, `firstTxnAt` |
+| `User` | Сотрудник (7 ролей, 5 команд); + `planMonthly`, `telegramChatId` |
+| `Branch` | Филиал; + `marketCapacityYL`, `marketCapacityIP`, `marketSharePct` |
+| `Activity` | Взаимодействие (5 типов: CALL/MEETING/EMAIL/WHATSAPP/VISIT); + `dealId`, `isPlanned`, `completedAt` |
 | `Task` | Задача менеджера (P1/P2/P3, статусы, эскалация) |
-| `Deal` | Сделка в pipeline |
+| `Deal` | Сделка в pipeline; + `lostReasonCode` (9 стандартных значений) |
 | `Changelog` | История изменений клиента |
 | `ContactPerson` | Контактные лица клиента |
 | `AccountPlan` | Аккаунт-план |
+| `KYCChecklist` | KYC-чеклист клиента (7 пунктов, статус PENDING/DONE/N_A) |
+| `Merchant` | Торговые точки клиента |
+| `ManagerMonthlySnapshot` | Ежемесячный снапшот KPI менеджера |
 | `ProposalTemplate` | Шаблон коммерческого предложения |
 | `PermissionConfig` | Матрица доступа ролей к секциям |
 | `PortfolioSnapshot` | Ежедневный снапшот метрик (для трендов) |
-| `Product` | Каталог банковских продуктов (управляется через UI) |
-| `BranchProductTarget` | Плановые показатели по продукту для филиала (год + **месяц**) |
+| `Product` | Каталог банковских продуктов |
+| `BranchProductTarget` | Плановые показатели по продукту для филиала (год + месяц) |
 | `TeamProductTarget` | Плановые показатели по продукту для команды (год + месяц) |
 
 ### Миграции
@@ -225,6 +312,8 @@ npm run db:generate
 20260528000004_portfolio_snapshots
 20260528000005_products_monthly
 20260528000006_team_targets
+20260528000007_p1p2_features      ← ActivityType WHATSAPP/VISIT, KYCChecklist, Merchant,
+                                     ManagerMonthlySnapshot, DealLostReason, KYCItemStatus
 ```
 
 ### Seed-данные
@@ -245,22 +334,33 @@ npm run db:seed   # 3 филиала, 6 пользователей, ~15 клие
 
 | Раздел | Путь | Функционал |
 |---|---|---|
-| Сотрудники | `/admin/users` | CRUD пользователей, роли, команды, филиалы |
+| Сотрудники | `/admin/users` | CRUD пользователей + перераспределение портфеля (авто / на конкретного менеджера) |
 | Матрица доступа | `/admin/permissions` | Видимость секций по ролям |
 | Каталог продуктов | `/admin/products?tab=catalog` | Добавить/изменить/удалить продукты |
 | Планы по филиалам | `/admin/products?tab=targets&scope=branches` | Помесячные цели: филиал × продукт |
 | Планы по командам | `/admin/products?tab=targets&scope=teams` | Помесячные цели: команда × продукт |
 | CLM-правила | `/admin/clm-rules` | Просмотр текущих порогов |
-| Уведомления | `/admin/notifications` | Telegram, ручной запуск cron |
+| Уведомления | `/admin/notifications` | Telegram, ручной запуск всех cron-заданий |
+
+### Перераспределение портфеля
+
+`/admin/users` → кнопка **«Перераспределить портфель»**:
+- **Авто** — клиенты менеджера распределяются по коллегам той же команды/филиала, равномерно по нагрузке
+- **На конкретного** — все клиенты переходят одному выбранному менеджеру
+- Каждая передача фиксируется в Changelog
 
 ---
 
 ## Telegram-уведомления
 
+Два канала:
+- **Групповой** (`TELEGRAM_CHAT_ID`) — итоги cron-заданий, мидмесячный алерт
+- **Личный** (`user.telegramChatId`) — персональные алерты по плану активаций
+
 Настройка:
 1. Создать бота через [@BotFather](https://t.me/BotFather), получить `TELEGRAM_BOT_TOKEN`
 2. Узнать `chat_id`: `https://api.telegram.org/bot<TOKEN>/getUpdates`
-3. Прописать `chat_id` каждому сотруднику в `/admin/users`
+3. Прописать личный `chat_id` каждому сотруднику в `/admin/users`
 
 ---
 
