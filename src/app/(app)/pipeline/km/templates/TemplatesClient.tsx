@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createProposalTemplate, deleteProposalTemplate } from "@/lib/actions/proposals";
 import { useRouter } from "next/navigation";
+import { KM_PRODUCTS, KM_CATEGORY_LABELS } from "@/lib/pipeline-config";
 
 type Template = {
   id:          string;
@@ -14,11 +15,6 @@ type Template = {
   createdAt:   Date;
 };
 
-const PRODUCTS = [
-  "RKO", "MBusiness", "Эквайринг (POS)", "Эквайринг (QR)", "Кредит",
-  "Овердрафт", "Торговое финансирование", "Зарплатный проект",
-  "Депозит", "Корпоративная карта",
-];
 
 export function TemplatesClient({
   templates,
@@ -35,14 +31,14 @@ export function TemplatesClient({
   const [deleting, setDeleting]   = useState<string | null>(null);
   const [saving, setSaving]       = useState(false);
   const [form, setForm] = useState({
-    title: "", productName: PRODUCTS[0], body: "", tags: "",
+    title: "", productName: KM_PRODUCTS[0].label, body: "", tags: "",
   });
 
   async function handleCreate() {
     if (!form.title.trim() || !form.body.trim()) return;
     setSaving(true);
     await createProposalTemplate({ ...form, team });
-    setForm({ title: "", productName: PRODUCTS[0], body: "", tags: "" });
+    setForm({ title: "", productName: KM_PRODUCTS[0].label, body: "", tags: "" });
     setShowForm(false);
     setSaving(false);
     router.refresh();
@@ -91,7 +87,13 @@ export function TemplatesClient({
                 onChange={e => setForm(f => ({ ...f, productName: e.target.value }))}
                 className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-green-600 bg-white"
               >
-                {PRODUCTS.map(p => <option key={p}>{p}</option>)}
+                {Object.entries(KM_CATEGORY_LABELS).map(([cat, catLabel]) => (
+                  <optgroup key={cat} label={catLabel}>
+                    {KM_PRODUCTS.filter(p => p.category === cat).map(p => (
+                      <option key={p.key} value={p.label}>{p.icon} {p.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
           </div>

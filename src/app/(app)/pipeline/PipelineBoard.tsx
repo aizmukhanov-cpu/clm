@@ -14,6 +14,8 @@ import {
   STAGE_COLORS,
   nextStage,
   PipelineStage,
+  KM_PRODUCTS,
+  KM_CATEGORY_LABELS,
 } from "@/lib/pipeline-config";
 
 type Deal = {
@@ -214,11 +216,19 @@ function NewDealForm({
 
           <div>
             <label className="block text-xs text-gray-500 mb-1">Продукт</label>
-            <input
+            <select
               name="product"
-              placeholder="MBusiness, Эквайринг, Кредит..."
               className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mbank-green)]"
-            />
+            >
+              <option value="">— выберите —</option>
+              {Object.entries(KM_CATEGORY_LABELS).map(([cat, catLabel]) => (
+                <optgroup key={cat} label={catLabel}>
+                  {KM_PRODUCTS.filter((p) => p.category === cat).map((p) => (
+                    <option key={p.key} value={p.label}>{p.icon} {p.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
