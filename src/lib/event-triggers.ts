@@ -23,7 +23,11 @@ type TriggerRule = {
   id:        string;         // unique rule id for dedup
   name:      string;
   priority:  "P1" | "P2" | "P3";
-  condition: (c: ClientRow, existing: string[]) => boolean;
+  /**
+   * pending = PENDING/OVERDUE tasks для этого клиента (обновляется внутри прогона)
+   * ever    = все D+ задачи любого статуса (снимок ДО прогона, не меняется)
+   */
+  condition: (c: ClientRow, pending: string[], ever: string[]) => boolean;
   action:    string;
   daysUntilDue: number;
   assignTo:  (c: ClientRow) => string | null; // returns userId or null
@@ -72,15 +76,18 @@ const TRIGGER_RULES: TriggerRule[] = [
   },
 
   // ── ОНБОРДИНГ: последовательные задачи ──────────────────
-  // Появляются только если клиент всё ещё в ONBOARD без транзакций
+  // Каждая задача создаётся ровно один раз и только ПОСЛЕ предыдущей.
+  // ever = снимок всех D+ задач (любой статус) ДО старта прогона —
+  //        это гарантирует, что в одну ночь создаётся не более одной задачи,
+  //        даже если cron пропустил несколько дней (catch-up сценарий).
   {
     id:       "D+3",
     name:     "Онбординг D+3: нет первой транзакции",
     priority: "P3",
-    condition: (c, existing) =>
+    condition: (c, _pending, ever) =>
       c.clmStage === "ONBOARD" &&
       c.txnCount30d === 0 &&
-      !existing.includes("D+3") &&
+      !ever.includes("D+3") &&          // никогда не создавалась
       daysSinceOnboard(c) >= 3,
     action:      "Первая транзакция? Позвонить, убрать барьер",
     daysUntilDue: 1,
@@ -90,10 +97,11 @@ const TRIGGER_RULES: TriggerRule[] = [
     id:       "D+7",
     name:     "Онбординг D+7: всё ещё нет транзакций",
     priority: "P2",
-    condition: (c, existing) =>
+    condition: (c, _pending, ever) =>
       c.clmStage === "ONBOARD" &&
       c.txnCount30d === 0 &&
-      !existing.includes("D+7") &&
+      !ever.includes("D+7") &&          // никогда не создавалась
+      ever.includes("D+3") &&           // D+3 уже существовала (из БД до прогона)
       daysSinceOnboard(c) >= 7,
     action:      "Нет транзакций — выяснить причину",
     daysUntilDue: 1,
@@ -103,10 +111,11 @@ const TRIGGER_RULES: TriggerRule[] = [
     id:       "D+14",
     name:     "Онбординг D+14: эскалация",
     priority: "P1",
-    condition: (c, existing) =>
+    condition: (c, _pending, ever) =>
       c.clmStage === "ONBOARD" &&
       c.txnCount30d === 0 &&
-      !existing.includes("D+14") &&
+      !ever.includes("D+14") &&         // никогда не создавалась
+      ever.includes("D+7") &&           // D+7 уже существовала (из БД до прогона)
       daysSinceOnboard(c) >= 14,
     action:      "Эскалация — нет транзакций 14 дней, передать в реактивацию",
     daysUntilDue: 0,
@@ -278,6 +287,20 @@ export async function runEventTriggers(): Promise<TriggerResult> {
     existingByClient.get(t.clientId)!.push(t.triggerDay!);
   }
 
+  // Все D+ задачи когда-либо созданные (любой статус включая DONE).
+  // Используется для межшаговых зависимостей D+3→D+7→D+14.
+  // Снимается ДО прогона и не меняется — гарантирует, что в одну ночь
+  // создаётся не более одной онбординговой задачи.
+  const everDplusTasks = await db.task.findMany({
+    where: { triggerDay: { in: ["D+1", "D+3", "D+7", "D+14"] } },
+    select: { clientId: true, triggerDay: true },
+  });
+  const everByClient = new Map<string, string[]>();
+  for (const t of everDplusTasks) {
+    if (!everByClient.has(t.clientId)) everByClient.set(t.clientId, []);
+    everByClient.get(t.clientId)!.push(t.triggerDay!);
+  }
+
   let unownedCount = 0;
 
   for (const client of clients as (ClientRow & { accountPlanOverdue?: boolean })[]) {
@@ -286,10 +309,11 @@ export async function runEventTriggers(): Promise<TriggerResult> {
       client.accountPlanOverdue = new Date(client.accountPlan.nextMeeting) < now;
     }
     const existing = existingByClient.get(client.id) ?? [];
+    const ever     = everByClient.get(client.id) ?? [];
 
     for (const rule of TRIGGER_RULES) {
       try {
-        if (!rule.condition(client, existing)) continue;
+        if (!rule.condition(client, existing, ever)) continue;
 
         // Для ничейных клиентов — назначаем на ADMIN
         let assignedTo = rule.assignTo(client);
