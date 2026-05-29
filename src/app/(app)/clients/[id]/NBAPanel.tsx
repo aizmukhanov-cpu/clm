@@ -87,6 +87,18 @@ export function NBAPanel({ client }: Props) {
   });
 
   if (recs.length === 0) {
+    // Проверяем есть ли активные задачи — если да, NBA подавлена задачами (не "всё хорошо")
+    const hasActiveTasks = activeTriggers.length > 0;
+    if (hasActiveTasks) {
+      return (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+          <div className="flex items-center gap-2 text-sm text-blue-700 font-medium">
+            <span>📋</span>
+            <span>Задачи уже в работе — рекомендации NBA не нужны</span>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
         <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium">

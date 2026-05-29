@@ -39,7 +39,6 @@ type ClientSignals = {
   /**
    * triggerDay значения активных (PENDING/OVERDUE) задач клиента.
    * NBA не показывает рекомендацию, если задача по тому же триггеру уже существует.
-   * Пример: ["reactivation-60d", "cross-sell-acquiring", "seq:onboarding:d0"]
    */
   activeTriggers:   string[];
 };
@@ -56,11 +55,10 @@ function productsActive(c: ClientSignals): number {
 
 /**
  * Проверяет, есть ли уже активная задача для данного триггера.
- * Также учитывает активные последовательности (triggerDay начинается с "seq:{seqId}:").
  *
- * Используется ТОЛЬКО для P2/P3 рекомендаций — снижение шума когда задача уже в работе.
- * P1 рекомендации (срочные) намеренно НЕ подавляются: менеджер обязан видеть
- * критическое состояние клиента независимо от наличия задач в списке.
+ * Используется для P2/P3 рекомендаций — снижение шума когда задача уже в работе.
+ * P1 рекомендации намеренно НЕ подавляются, КРОМЕ онбордингового блока (где
+ * D+ задачи уже полностью отслеживают ситуацию).
  */
 function hasTask(activeTriggers: string[], ...keys: string[]): boolean {
   return keys.some(k => activeTriggers.some(t => t === k || t.startsWith(`seq:${k}:`)));
@@ -72,8 +70,14 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   const at = c.activeTriggers;
 
   // ── ОНБОРДИНГ ────────────────────────────────────────────
-  // P1 — не подавляется задачами: менеджер должен видеть проблему
-  if (c.clmStage === "ONBOARD" && c.txnCount30d === 0 && c.daysSinceLastTxn > 7) {
+  // Не показываем, если D+ задачи уже в работе: они точнее отслеживают ситуацию.
+  // NBA здесь нужен только для самого раннего момента (до первого cron-запуска).
+  if (
+    c.clmStage === "ONBOARD" &&
+    c.txnCount30d === 0 &&
+    c.daysSinceLastTxn > 7 &&
+    !hasTask(at, "D+1", "D+3", "D+7", "D+14") // D+ задачи уже ведут эту ситуацию
+  ) {
     recs.push({
       priority: "P1",
       icon: "🚀",
@@ -86,7 +90,6 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
 
   // ── РЕАКТИВАЦИЯ ───────────────────────────────────────────
   // P1 — ВСЕГДА показывается при REACTIVATE или 60+ дней без транзакций.
-  // Наличие задачи не снимает тревогу — менеджер должен видеть состояние клиента.
   if (c.clmStage === "REACTIVATE" || (c.daysSinceLastTxn >= 60 && c.clmStage !== "ACQUIRE")) {
     recs.push({
       priority: "P1",
@@ -100,21 +103,26 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
     });
   } else if (
     c.daysSinceLastTxn >= 30 &&
-    c.clmStage === "GROW" &&
-    !hasTask(at, "reactivation-30d", "reactivation") // P2 — подавляется если задача есть
+    (c.clmStage === "GROW" || c.clmStage === "ACTIVATE") && // было только GROW — добавлен ACTIVATE
+    !hasTask(at, "reactivation-30d", "reactivation-60d") // P2 — подавляется если задача есть
   ) {
     recs.push({
       priority: "P2",
       icon: "⚠️",
       title: "Снижение активности",
-      reason: `${c.daysSinceLastTxn} дней без транзакций у GROW-клиента`,
+      reason: `${c.daysSinceLastTxn} дней без транзакций — клиент теряет активность`,
       action: "Позвонить, уточнить удовлетворённость. Предложить новый продукт",
       tag: "reactivation",
     });
   }
 
   // ── КРОСС-ПРОДАЖИ ─────────────────────────────────────────
-  if (c.clmCohort === "ACTIVE" || c.clmStage === "GROW") {
+  // Не показываем кросс-продажи для клиентов в реактивации —
+  // сначала нужно восстановить базовую активность.
+  if (
+    (c.clmCohort === "ACTIVE" || c.clmStage === "GROW") &&
+    c.clmStage !== "REACTIVATE"
+  ) {
     const active = productsActive(c);
     const depth  = active / PRODUCT_COUNT;
 
@@ -200,7 +208,7 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   } else if (
     c.isKAMClient &&
     (c.lastActivityDays === null || c.lastActivityDays > 30) &&
-    !hasTask(at, "grow-account-plan", "account-plan-grow") // P2 — подавляется если задача есть
+    !hasTask(at, "grow-account-plan", "account-plan-grow")
   ) {
     recs.push({
       priority: "P2",
@@ -213,11 +221,12 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   }
 
   // ── НЕТ АКТИВНОСТЕЙ ОТ МЕНЕДЖЕРА ─────────────────────────
+  // Подавляется если есть задача реактивации — она уже требует того же звонка.
   if (
     c.lastActivityDays !== null &&
     c.lastActivityDays > 30 &&
     c.clmStage !== "ACQUIRE" &&
-    !hasTask(at, "no-touch-30d")
+    !hasTask(at, "no-touch-30d", "reactivation-30d", "reactivation-60d")
   ) {
     recs.push({
       priority: "P3",
