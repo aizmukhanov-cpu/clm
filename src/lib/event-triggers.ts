@@ -130,7 +130,8 @@ const TRIGGER_RULES: TriggerRule[] = [
     condition: (c, existing) =>
       c.daysSinceLastTxn >= 30 &&
       c.clmStage !== "ACQUIRE" &&
-      !existing.includes("reactivation-30d"),
+      !existing.includes("reactivation-30d") &&
+      !existing.includes("reactivation-60d"), // не создавать 30d если уже есть 60d (эскалация)
     action:   "Первый звонок реактивации — выяснить причину отсутствия активности",
     daysUntilDue: 1,
     assignTo: (c) => c.managerId,
@@ -233,12 +234,15 @@ const TRIGGER_RULES: TriggerRule[] = [
     priority: "P3",
     condition: (c, existing) => {
       if (c.clmStage === "ACQUIRE") return false;
+      // Если уже есть задача реактивации — та включает звонок клиенту, no-touch избыточен
+      if (existing.includes("reactivation-30d") || existing.includes("reactivation-60d")) return false;
+      if (existing.includes("no-touch-30d")) return false;
       const lastActivity = c.activities[0];
-      if (!lastActivity) return !existing.includes("no-touch-30d");
+      if (!lastActivity) return true;
       const days = Math.floor(
         (Date.now() - new Date(lastActivity.performedAt).getTime()) / 86_400_000
       );
-      return days >= 30 && !existing.includes("no-touch-30d");
+      return days >= 30;
     },
     action:   "Плановый check-in: 30+ дней без контакта. Позвонить, зафиксировать в истории",
     daysUntilDue: 2,
