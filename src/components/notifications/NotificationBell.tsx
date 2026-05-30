@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, CSSProperties } from "react";
 import { Bell } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -33,11 +33,13 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 export function NotificationBell() {
-  const [open,   setOpen]   = useState(false);
-  const [items,  setItems]  = useState<NotifItem[]>([]);
-  const [unread, setUnread] = useState(0);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const router   = useRouter();
+  const [open,       setOpen]      = useState(false);
+  const [items,      setItems]     = useState<NotifItem[]>([]);
+  const [unread,     setUnread]    = useState(0);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
+  const panelRef  = useRef<HTMLDivElement>(null);
+  const bellRef   = useRef<HTMLButtonElement>(null);
+  const router    = useRouter();
 
   const load = useCallback(async () => {
     try {
@@ -98,10 +100,37 @@ export function NotificationBell() {
   }
 
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative">
       {/* Bell button */}
       <button
-        onClick={() => { setOpen((o) => !o); if (!open) load(); }}
+        ref={bellRef}
+        onClick={() => {
+          if (open) { setOpen(false); return; }
+          // Вычисляем позицию панели относительно вьюпорта (fixed)
+          const rect = bellRef.current?.getBoundingClientRect();
+          if (rect) {
+            const PANEL_W = 320;
+            const PANEL_MAX_H = 420;
+            const GAP = 8;
+            // По горизонтали: выравниваем по левому краю кнопки, но не выходим за экран
+            let left = rect.left;
+            if (left + PANEL_W > window.innerWidth - 8) {
+              left = window.innerWidth - PANEL_W - 8;
+            }
+            // По вертикали: открываем вверх если места внизу недостаточно
+            const spaceBelow = window.innerHeight - rect.bottom - GAP;
+            const spaceAbove = rect.top - GAP;
+            if (spaceBelow >= Math.min(PANEL_MAX_H, 200) || spaceBelow >= spaceAbove) {
+              // Открываем вниз
+              setPanelStyle({ top: rect.bottom + GAP, left, position: "fixed" });
+            } else {
+              // Открываем вверх
+              setPanelStyle({ bottom: window.innerHeight - rect.top + GAP, left, position: "fixed" });
+            }
+          }
+          load();
+          setOpen(true);
+        }}
         className="relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
         style={{ color: "rgba(255,255,255,0.50)" }}
         onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
@@ -119,11 +148,12 @@ export function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown panel */}
+      {/* Dropdown panel — fixed позиция вычисляется в onClick */}
       {open && (
         <div
-          className="absolute bottom-10 left-0 w-80 bg-white rounded-xl shadow-2xl overflow-hidden z-50"
-          style={{ border: "1px solid rgba(0,0,0,0.08)" }}
+          ref={panelRef}
+          className="w-80 bg-white rounded-xl shadow-2xl overflow-hidden z-[200]"
+          style={{ ...panelStyle, border: "1px solid rgba(0,0,0,0.08)", maxHeight: "min(420px, calc(100vh - 80px))" }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid #f3f4f6" }}>
