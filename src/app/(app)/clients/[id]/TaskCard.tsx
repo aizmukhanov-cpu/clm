@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { format } from "date-fns";
-import { completeTask } from "@/lib/actions/tasks";
 import { taskLabel, TASK_PRIORITY_LABEL } from "@/lib/task-labels";
+import { TaskCompleteForm } from "@/components/task/TaskCompleteForm";
 
 type Task = {
   id: string;
@@ -24,38 +24,16 @@ const PRIORITY_STYLE: Record<string, string> = {
 
 
 export function TaskCard({ task, clientId }: Props) {
-  const [expanded, setExpanded]       = useState(false);
-  const [comment,  setComment]        = useState("");
-  const [addActivity, setAddActivity] = useState(true);
-  const [error,    setError]          = useState(false);
-  const [pending,  startTransition]   = useTransition();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const expandRef = useRef<HTMLDivElement>(null);
 
-  const overdue    = new Date(task.dueDate) < new Date();
-  const escalated  = task.status === "ESCALATED";
+  const overdue   = new Date(task.dueDate) < new Date();
+  const escalated = task.status === "ESCALATED";
 
-  // Фокус на textarea при раскрытии
+  // Скролл к форме при раскрытии
   useEffect(() => {
-    if (expanded) textareaRef.current?.focus();
+    if (expanded) expandRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [expanded]);
-
-  function handleSubmit() {
-    if (!comment.trim()) {
-      setError(true);
-      textareaRef.current?.focus();
-      return;
-    }
-    setError(false);
-    startTransition(async () => {
-      await completeTask(task.id, clientId, comment.trim(), addActivity);
-    });
-  }
-
-  function handleCancel() {
-    setExpanded(false);
-    setComment("");
-    setError(false);
-  }
 
   const borderColor = escalated ? "border-purple-200" : overdue ? "border-red-100" : "border-emerald-100";
   const bgColor     = escalated ? "#faf5ff"           : overdue ? "#fef2f2"        : "var(--mbank-green-pale)";
@@ -112,59 +90,19 @@ export function TaskCard({ task, clientId }: Props) {
       {/* ── Inline форма закрытия ── */}
       {expanded && (
         <div
-          className="border-t px-2.5 pb-2.5 pt-2 space-y-2"
+          ref={expandRef}
+          className="border-t px-2.5 pb-2.5 pt-2"
           style={{ borderColor: overdue ? "#fecaca" : "#bbf7d0" }}
         >
-          <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-1">
-              Результат / комментарий <span className="text-red-400">*</span>
-            </label>
-            <textarea
-              ref={textareaRef}
-              value={comment}
-              onChange={(e) => { setComment(e.target.value); if (e.target.value.trim()) setError(false); }}
-              placeholder="Что сделано? Результат звонка, встречи, договорённости..."
-              rows={3}
-              className={`w-full rounded-lg border px-2.5 py-2 text-xs resize-none bg-white focus:outline-none focus:ring-2 transition-colors ${
-                error
-                  ? "border-red-300 focus:ring-red-200"
-                  : "border-gray-200 focus:ring-[var(--mbank-green)]"
-              }`}
-            />
-            {error && (
-              <p className="text-[10px] text-red-500 mt-0.5">Обязательно укажите результат</p>
-            )}
-          </div>
-
-          {/* Опция: создать запись в активности */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={addActivity}
-              onChange={(e) => setAddActivity(e.target.checked)}
-              className="rounded border-gray-300 text-[var(--mbank-green)] focus:ring-[var(--mbank-green)]"
-            />
-            <span className="text-[11px] text-gray-500">Записать в историю контактов</span>
-          </label>
-
-          {/* Кнопки */}
-          <div className="flex gap-2 pt-0.5">
-            <button
-              onClick={handleSubmit}
-              disabled={pending}
-              className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold text-white transition-opacity disabled:opacity-60"
-              style={{ background: overdue ? "#dc2626" : "var(--mbank-green)" }}
-            >
-              {pending ? "Сохраняю..." : "✓ Закрыть задачу"}
-            </button>
-            <button
-              onClick={handleCancel}
-              disabled={pending}
-              className="px-3 py-1.5 rounded-lg text-[11px] text-gray-500 border border-gray-200 hover:bg-white transition-colors disabled:opacity-60"
-            >
-              Отмена
-            </button>
-          </div>
+          <TaskCompleteForm
+            variant="inline"
+            taskId={task.id}
+            clientId={clientId}
+            clientName=""
+            triggerDay={task.triggerDay}
+            action={task.action}
+            onDone={() => setExpanded(false)}
+          />
         </div>
       )}
     </div>

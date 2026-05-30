@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { format } from "date-fns";
-import { completeTask } from "@/lib/actions/tasks";
 import { taskLabel, TASK_PRIORITY_LABEL } from "@/lib/task-labels";
+import { TaskCompleteForm } from "@/components/task/TaskCompleteForm";
 import { STAGE_LABELS } from "@/lib/clm-config";
 import type { CLMStage } from "@/generated/prisma/client";
 import type { MyTaskRow } from "@/lib/actions/portfolio";
@@ -16,82 +16,6 @@ const PRIORITY_STYLE: Record<string, { bg: string; text: string }> = {
   P3: { bg: "var(--mbank-green-pale)", text: "var(--mbank-green)" },
 };
 
-/* ── Модалка выполнения ─────────────────────────────────── */
-function CompleteModal({ task, onClose }: { task: MyTaskRow; onClose: () => void }) {
-  const [result, setResult] = useState("");
-  const [addActivity, setAddActivity] = useState(true);
-  const [pending, startTransition] = useTransition();
-
-  function handleSubmit() {
-    if (!result.trim()) return;
-    startTransition(async () => {
-      await completeTask(task.id, task.client.id, result, addActivity);
-      onClose();
-    });
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div>
-            <h3 className="font-semibold text-gray-900">Выполнить задачу</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              <Link href={`/clients/${task.client.id}`} className="hover:underline font-medium text-gray-700">
-                {task.client.name}
-              </Link>
-              {" · "}{taskLabel(task.triggerDay)}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none mt-0.5">×</button>
-        </div>
-
-        <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 mb-4">
-          {task.action}
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">
-              Результат / комментарий <span className="text-red-400">*</span>
-            </label>
-            <textarea
-              value={result}
-              onChange={(e) => setResult(e.target.value)}
-              placeholder="Позвонил клиенту, договорились о встрече..."
-              rows={3}
-              autoFocus
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--mbank-green)] focus:border-transparent"
-            />
-          </div>
-          <label className="flex items-center gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={addActivity}
-              onChange={(e) => setAddActivity(e.target.checked)}
-              className="w-4 h-4 rounded accent-[var(--mbank-green)]"
-            />
-            <span className="text-sm text-gray-600">Записать как контакт с клиентом</span>
-          </label>
-        </div>
-
-        <div className="flex gap-3 mt-5">
-          <button
-            onClick={handleSubmit}
-            disabled={pending || !result.trim()}
-            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            style={{ background: "var(--mbank-green)" }}
-          >
-            {pending ? "Сохраняю..." : "Выполнено ✓"}
-          </button>
-          <button onClick={onClose} className="px-5 py-2.5 rounded-lg text-sm text-gray-600 border border-gray-200 hover:bg-gray-50">
-            Отмена
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ── Основная таблица ───────────────────────────────────── */
 export function TasksTable({
@@ -256,7 +180,15 @@ export function TasksTable({
       </div>
 
       {activeTask && (
-        <CompleteModal task={activeTask} onClose={() => setActiveTask(null)} />
+        <TaskCompleteForm
+          variant="modal"
+          taskId={activeTask.id}
+          clientId={activeTask.client.id}
+          clientName={activeTask.client.name}
+          triggerDay={activeTask.triggerDay}
+          action={activeTask.action}
+          onDone={() => setActiveTask(null)}
+        />
       )}
     </div>
   );

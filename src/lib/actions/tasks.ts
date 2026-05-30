@@ -5,14 +5,26 @@ import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { sendNotification } from "@/lib/notifications";
 
+/**
+ * Завершить задачу со структурированным исходом.
+ *
+ * @param outcome  - значение из TASK_OUTCOMES (напр. "txn_done", "no_answer")
+ * @param outcomeLabel - человекочитаемый текст исхода (напр. "✅ Транзакция уже прошла")
+ * @param comment  - опциональный дополнительный комментарий менеджера
+ *
+ * Активность в истории клиента создаётся ВСЕГДА — это обязательный аудит-след.
+ */
 export async function completeTask(
   taskId: string,
   clientId: string,
-  result: string,
-  createActivity: boolean = false,
+  outcome: string,
+  outcomeLabel: string,
+  comment: string = "",
 ): Promise<{ error?: string }> {
   const session = await getSession();
   if (!session) return { error: "Не авторизован" };
+
+  if (!outcome || !outcomeLabel) return { error: "Укажите исход задачи" };
 
   const task = await db.task.findUnique({
     where: { id: taskId },
@@ -20,27 +32,33 @@ export async function completeTask(
   });
   if (!task) return { error: "Задача не найдена" };
 
+  // Итоговый текст: "✅ Транзакция уже прошла — позвонил, договорились о встрече"
+  const fullResult = comment.trim()
+    ? `${outcomeLabel} — ${comment.trim()}`
+    : outcomeLabel;
+
   await db.$transaction(async (tx) => {
     await tx.task.update({
       where: { id: taskId },
-      data: { status: "DONE", result: result || "Выполнено" },
+      data: { status: "DONE", result: fullResult },
     });
 
-    if (createActivity && result.trim()) {
-      await tx.activity.create({
-        data: {
-          clientId,
-          type: "CALL",
-          result: result.trim(),
-          performedBy: session.id,
-          performedAt: new Date(),
-        },
-      });
-    }
+    // Активность создаётся ВСЕГДА — обязательный след в истории клиента.
+    // Нельзя закрыть задачу без записи в историю контактов.
+    await tx.activity.create({
+      data: {
+        clientId,
+        type: "CALL",
+        result: fullResult,
+        performedBy: session.id,
+        performedAt: new Date(),
+      },
+    });
   });
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/activation-desk");
+  revalidatePath("/my-tasks");
   return {};
 }
 
