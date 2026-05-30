@@ -493,7 +493,7 @@ export function ClientsTable({
                   </TableCell>
                   <TableCell>
                     <span className={`text-xs font-medium ${c.type === "YL" ? "text-indigo-600" : "text-teal-600"}`}>
-                      {c.type}
+                      {c.type === "YL" ? "ОсОО" : "ИП"}
                     </span>
                   </TableCell>
                   <TableCell className="text-xs text-gray-600 max-w-[100px] truncate">

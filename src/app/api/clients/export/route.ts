@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   const rows = clients.map((c) => {
     const n = [c.hasMBusiness,c.hasMKassaPos,c.hasMKassaQr,c.hasAcquiring,c.hasSalaryProject,c.hasPayroll,c.hasCorporateCard,c.hasCredit,c.hasDeposit,c.hasTradeFinance].filter(Boolean).length;
-    return [c.inn,c.name,c.type==="YL"?"Юр.лицо":"ИП",c.branch?.name??"",c.manager?.team??"",c.manager?.name??"",c.kam?.name??"",STAGE_LABEL[c.clmStage]??c.clmStage,COHORT_LABEL[c.clmCohort]??c.clmCohort,c.txnCount30d,c.daysSinceLastTxn,c.gmv30d,n,c.hasMBusiness?"Да":"",c.hasMKassaPos?"Да":"",c.hasMKassaQr?"Да":"",c.hasAcquiring?"Да":"",c.hasSalaryProject?"Да":"",c.hasPayroll?"Да":"",c.hasCorporateCard?"Да":"",c.hasCredit?"Да":"",c.hasDeposit?"Да":"",c.hasTradeFinance?"Да":""].map(esc).join(",");
+    return [c.inn,c.name,c.type==="YL"?"ОсОО":"ИП",c.branch?.name??"",c.manager?.team??"",c.manager?.name??"",c.kam?.name??"",STAGE_LABEL[c.clmStage]??c.clmStage,COHORT_LABEL[c.clmCohort]??c.clmCohort,c.txnCount30d,c.daysSinceLastTxn,c.gmv30d,n,c.hasMBusiness?"Да":"",c.hasMKassaPos?"Да":"",c.hasMKassaQr?"Да":"",c.hasAcquiring?"Да":"",c.hasSalaryProject?"Да":"",c.hasPayroll?"Да":"",c.hasCorporateCard?"Да":"",c.hasCredit?"Да":"",c.hasDeposit?"Да":"",c.hasTradeFinance?"Да":""].map(esc).join(",");
   });
 
   const csv = "﻿" + [headers.map(esc).join(","), ...rows].join("\r\n");

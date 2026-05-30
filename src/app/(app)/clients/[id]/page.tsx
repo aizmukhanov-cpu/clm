@@ -246,7 +246,7 @@ export default async function ClientPage({ params }: { params: Params }) {
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                   client.type === "YL" ? "bg-indigo-50 text-indigo-700" : "bg-teal-50 text-teal-700"
                 }`}>
-                  {client.type === "YL" ? "Юр. лицо" : "ИП"}
+                  {client.type === "YL" ? "ОсОО" : "ИП"}
                 </span>
               </div>
             </div>

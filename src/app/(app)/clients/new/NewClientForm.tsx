@@ -51,7 +51,7 @@ export function NewClientForm({ branches, managers, kams }: Props) {
               </label>
               <div className="flex gap-2">
                 {[
-                  { value: "YL", label: "Юр. лицо" },
+                  { value: "YL", label: "ОсОО" },
                   { value: "IP", label: "ИП" },
                 ].map((t) => (
                   <label
