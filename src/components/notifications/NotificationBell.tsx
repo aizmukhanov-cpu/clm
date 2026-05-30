@@ -132,9 +132,9 @@ export function NotificationBell() {
           setOpen(true);
         }}
         className="relative flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
-        style={{ color: "rgba(255,255,255,0.50)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        style={{ color: "#6b7280" }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "#f3f4f6"; e.currentTarget.style.color = "#111827"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6b7280"; }}
         title="Уведомления"
       >
         <Bell className="h-4 w-4" />

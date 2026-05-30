@@ -9,7 +9,6 @@ import {
   Zap, FolderKanban, BarChart2, Bell, Building2, ClipboardList, Box,
 } from "lucide-react";
 import { MeridianWordmark } from "@/components/ui/MeridianLogo";
-import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { useState } from "react";
 
 /* ─── Типы ─────────────────────────────────────────────── */
@@ -381,13 +380,10 @@ export function Sidebar({ role, team }: { role?: string; team?: string }) {
 
       {/* Footer */}
       <div
-        className="px-3 py-3 flex items-center justify-between"
-        style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}
+        className="px-4 py-3 text-[11px]"
+        style={{ borderTop: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.3)" }}
       >
-        <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.3)" }}>
-          MERIDIAN · {ROLE_BADGE[role ?? ""] ?? (team ?? role)} · 2026
-        </span>
-        <NotificationBell />
+        MERIDIAN · {ROLE_BADGE[role ?? ""] ?? (team ?? role)} · 2026
       </div>
     </aside>
   );

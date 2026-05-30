@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { LogoutButton } from "./LogoutButton";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN:      "Администратор",
@@ -66,6 +67,7 @@ export async function Header({ title }: { title?: string }) {
             </div>
           </div>
 
+          <NotificationBell />
           <LogoutButton />
         </div>
       )}
