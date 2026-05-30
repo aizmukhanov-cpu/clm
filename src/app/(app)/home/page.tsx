@@ -114,19 +114,72 @@ const TEAMS = [
   },
 ];
 
-/* ─── Навигационные карточки ────────────────────────────── */
+/* ─── Навигационные карточки (фильтруются по роли) ─────── */
 
-const QUICK_LINKS = [
-  { href: "/my-portfolio", icon: FolderKanban, label: "Мой портфель",    desc: "Личный портфель, задачи, воронка",   color: "#1A5C38" },
-  { href: "/dashboard",    icon: LayoutDashboard, label: "Дашборд",      desc: "Аналитика по всему корпоративному сегменту", color: "#1d4ed8" },
-  { href: "/clients",      icon: Users,           label: "Реестр клиентов", desc: "Полная база, фильтры, экспорт",    color: "#374151" },
-  { href: "/activation-desk", icon: CheckSquare,  label: "Activation Desk", desc: "Задачи по активации клиентов", color: "#d97706" },
-  { href: "/pipeline/km",  icon: TrendingUp,      label: "Pipeline КМ",  desc: "Воронка МСБ, КП, шаблоны",          color: "#0891b2" },
-  { href: "/pipeline/b2b", icon: TrendingUp,      label: "Pipeline B2B", desc: "Лиды, микро и ИП",                  color: "#7c3aed" },
-  { href: "/kam",          icon: Briefcase,       label: "KAM Портфель", desc: "Крупные клиенты, структурные сделки", color: "#be185d" },
-  { href: "/reactivation", icon: RotateCcw,       label: "Реактивация",  desc: "Клиенты под риском оттока",          color: "#c2410c" },
-  { href: "/branches",    icon: Building2,       label: "Филиалы",      desc: "Цели по продуктам, план/факт",        color: "#0f766e" },
+type QuickLink = {
+  href: string;
+  icon: React.ElementType;
+  label: string;
+  desc: string;
+  color: string;
+};
+
+const ALL_QUICK_LINKS: QuickLink[] = [
+  { href: "/my-portfolio",    icon: FolderKanban,    label: "Мой портфель",     desc: "Личный портфель, задачи, воронка",           color: "#1A5C38" },
+  { href: "/dashboard",       icon: LayoutDashboard, label: "Дашборд",          desc: "Аналитика по всему корпоративному сегменту", color: "#1d4ed8" },
+  { href: "/clients",         icon: Users,           label: "Реестр клиентов",  desc: "Полная база, фильтры, экспорт",              color: "#374151" },
+  { href: "/activation-desk", icon: CheckSquare,     label: "Activation Desk",  desc: "Задачи по активации клиентов",               color: "#d97706" },
+  { href: "/pipeline/km",     icon: TrendingUp,      label: "Pipeline КМ",      desc: "Воронка МСБ, КП, шаблоны",                  color: "#0891b2" },
+  { href: "/pipeline/b2b",    icon: TrendingUp,      label: "Pipeline B2B",     desc: "Лиды, микро и ИП",                          color: "#7c3aed" },
+  { href: "/pipeline/branch", icon: TrendingUp,      label: "Pipeline Филиал",  desc: "Продуктовые сделки по филиалу",              color: "#0f766e" },
+  { href: "/kam",             icon: Briefcase,       label: "KAM Портфель",     desc: "Крупные клиенты, структурные сделки",        color: "#be185d" },
+  { href: "/reactivation",    icon: RotateCcw,       label: "Реактивация",      desc: "Клиенты под риском оттока",                  color: "#c2410c" },
+  { href: "/branches",        icon: Building2,       label: "Филиалы",          desc: "Цели по продуктам, план/факт",               color: "#0f766e" },
 ];
+
+/** Ссылки на главной странице — только те, что доступны данной роли/команде */
+function getQuickLinks(role: string, team: string): QuickLink[] {
+  const WIDE_ACCESS = ["ADMIN", "DIRECTOR", "ANALYST"];
+  const isWide      = WIDE_ACCESS.includes(role);
+  const isLead      = role === "TEAM_LEAD";
+
+  // ADMIN / DIRECTOR / ANALYST — всё
+  if (isWide) return ALL_QUICK_LINKS;
+
+  // Общие для всех ролей
+  const links: QuickLink[] = [
+    ALL_QUICK_LINKS.find(l => l.href === "/my-portfolio")!,
+    ALL_QUICK_LINKS.find(l => l.href === "/activation-desk")!,
+  ];
+
+  // Dashboard и реестр — только для руководителей
+  if (isLead || role === "SUPERVISOR") {
+    links.splice(1, 0, ALL_QUICK_LINKS.find(l => l.href === "/dashboard")!);
+    if (isLead) links.splice(2, 0, ALL_QUICK_LINKS.find(l => l.href === "/clients")!);
+  }
+
+  // Pipeline — по команде
+  if (team === "KM"     || (isLead && team === "KM"))     links.push(ALL_QUICK_LINKS.find(l => l.href === "/pipeline/km")!);
+  if (team === "B2B"    || (isLead && team === "B2B"))    links.push(ALL_QUICK_LINKS.find(l => l.href === "/pipeline/b2b")!);
+  if (team === "BRANCH" || (isLead && team === "BRANCH")) links.push(ALL_QUICK_LINKS.find(l => l.href === "/pipeline/branch")!);
+
+  // KAM-портфель — для KAM-роли и TEAM_LEAD KAM-команды
+  if (role === "KAM" || (isLead && team === "KAM")) {
+    links.push(ALL_QUICK_LINKS.find(l => l.href === "/kam")!);
+  }
+
+  // Реактивация — VB-команда и руководители
+  if (team === "VB" || isLead) {
+    links.push(ALL_QUICK_LINKS.find(l => l.href === "/reactivation")!);
+  }
+
+  // Цели филиала — BRANCH-команда и руководители
+  if (team === "BRANCH" || isLead) {
+    links.push(ALL_QUICK_LINKS.find(l => l.href === "/branches")!);
+  }
+
+  return links.filter(Boolean);
+}
 
 /* ─── Страница ──────────────────────────────────────────── */
 
@@ -140,7 +193,8 @@ export default async function HomePage() {
     stageCounts.map((s) => [s.clmStage, s._count])
   );
 
-  const isAdmin = session.role === "ADMIN" || session.role === "ANALYST";
+  const isAdmin      = session.role === "ADMIN" || session.role === "ANALYST";
+  const quickLinks   = getQuickLinks(session.role, session.team ?? "");
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
@@ -216,7 +270,7 @@ export default async function HomePage() {
       <div>
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-widest mb-4">Разделы системы</h2>
         <div className="grid grid-cols-3 gap-3">
-          {QUICK_LINKS.map(({ href, icon: Icon, label, desc, color }) => (
+          {quickLinks.map(({ href, icon: Icon, label, desc, color }) => (
             <Link key={href} href={href}>
               <div className="group bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md hover:border-gray-200 transition-all cursor-pointer h-full">
                 <div

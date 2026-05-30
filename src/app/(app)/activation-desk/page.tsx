@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { getDeskTasks, DeskFilters } from "@/lib/actions/activation-desk";
 import { DeskTable } from "./DeskTable";
 
@@ -23,6 +25,9 @@ export default async function ActivationDeskPage({
 }: {
   searchParams: SearchParams;
 }) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
   const sp = await searchParams;
 
   return (

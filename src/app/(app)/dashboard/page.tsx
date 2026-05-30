@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { getDashboardData } from "@/lib/actions/dashboard";
 import { STAGE_LABELS } from "@/lib/clm-config";
 import { CLMStage } from "@/generated/prisma/client";
@@ -127,7 +128,14 @@ function Delta({ value, unit = "%" }: { value: number | null; unit?: string }) {
 
 /* ─── Page ────────────────────────────────────────────── */
 
+// Роли с доступом к полному дашборду
+const DASHBOARD_ROLES = ["ADMIN", "DIRECTOR", "ANALYST", "TEAM_LEAD", "SUPERVISOR"];
+
 export default async function DashboardPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (!DASHBOARD_ROLES.includes(session.role)) redirect("/my-portfolio");
+
   const data = await getDashboardData();
   if (!data) redirect("/login");
 

@@ -93,9 +93,16 @@ async function getBranchData(year: number) {
 
 /* ─── Page ──────────────────────────────────────────────── */
 
+// Доступ: широкие роли + сотрудники команды BRANCH
+const BRANCHES_ROLES = ["ADMIN", "DIRECTOR", "ANALYST", "TEAM_LEAD", "SUPERVISOR", "SPECIALIST"];
+
 export default async function BranchesPage() {
   const session = await getSession();
   if (!session) redirect("/login");
+  // SPECIALIST и SUPERVISOR — только если работают в команде BRANCH
+  if (!["ADMIN", "DIRECTOR", "ANALYST", "TEAM_LEAD"].includes(session.role)) {
+    if (session.team !== "BRANCH") redirect("/my-portfolio");
+  }
 
   const year = new Date().getFullYear();
   const branches = await getBranchData(year);

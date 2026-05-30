@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
 import { getReactivationList, ReactivationFilters } from "@/lib/actions/reactivation";
 import { ReactivationTable } from "./ReactivationTable";
 
@@ -25,7 +27,16 @@ async function ReactivationContent({ sp }: { sp: Record<string, string> }) {
   );
 }
 
+// Реактивация видна аналитике/руководству + VB-команде
+const REACTIVATION_ROLES = ["ADMIN", "DIRECTOR", "ANALYST", "TEAM_LEAD", "SUPERVISOR"];
+
 export default async function ReactivationPage({ searchParams }: { searchParams: SearchParams }) {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (!REACTIVATION_ROLES.includes(session.role) && session.team !== "VB") {
+    redirect("/my-portfolio");
+  }
+
   const sp = await searchParams;
 
   return (
