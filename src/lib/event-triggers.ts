@@ -12,6 +12,7 @@
 
 import { db } from "@/lib/db";
 import { sendNotification } from "@/lib/notifications";
+import { createNotification } from "@/lib/notify";
 
 export type TriggerResult = {
   tasksCreated: number;
@@ -346,6 +347,15 @@ export async function runEventTriggers(): Promise<TriggerResult> {
             priority:   rule.priority,
             action:     rule.action,
           },
+        });
+
+        // In-app уведомление назначенному менеджеру
+        await createNotification({
+          userId: assignedTo,
+          type:   "task_assigned",
+          title:  `Новая задача: ${rule.name}`,
+          body:   client.name,
+          href:   `/clients/${client.id}`,
         });
 
         existing.push(rule.id); // prevent double-trigger in same run

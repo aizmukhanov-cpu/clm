@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sendNotification } from "@/lib/notifications";
+import { createNotification } from "@/lib/notify";
 
 export const runtime = "nodejs";
 
@@ -23,7 +24,11 @@ export async function POST(req: NextRequest) {
       dueDate: { lte: sevenDaysAgo },
       result:  null,
     },
-    include: {
+    select: {
+      id:         true,
+      clientId:   true,
+      assignedTo: true,
+      action:     true,
       client: { select: { name: true } },
       user:   { select: { name: true } },
     },
@@ -37,6 +42,17 @@ export async function POST(req: NextRequest) {
     where: { id: { in: candidates.map(t => t.id) } },
     data:  { status: "ESCALATED" },
   });
+
+  // In-app уведомления каждому ответственному менеджеру
+  for (const t of candidates) {
+    await createNotification({
+      userId: t.assignedTo,
+      type:   "task_escalated",
+      title:  `Задача эскалирована: ${t.action.slice(0, 60)}`,
+      body:   `${t.client.name} — просрочено >7 дней`,
+      href:   `/clients/${t.clientId}`,
+    });
+  }
 
   const lines = candidates.map(t =>
     `• ${t.client.name} — «${t.action}» (${t.user.name})`

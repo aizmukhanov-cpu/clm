@@ -193,6 +193,7 @@ model User {
   deals             Deal[]
   changelogs        Changelog[]
   monthlySnapshots  ManagerMonthlySnapshot[]
+  notifications     Notification[]
 
   @@map("users")
 }
@@ -471,4 +472,21 @@ model ProposalTemplate {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("proposal_templates")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  type      String    // task_assigned | task_overdue | task_escalated | task_completed
+  title     String
+  body      String    @default("")
+  href      String    @default("") // URL для перехода по клику
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
 }

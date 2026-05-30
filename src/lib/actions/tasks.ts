@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { sendNotification } from "@/lib/notifications";
+import { createNotification } from "@/lib/notify";
 
 /**
  * Завершить задачу со структурированным исходом.
@@ -28,7 +29,14 @@ export async function completeTask(
 
   const task = await db.task.findUnique({
     where: { id: taskId },
-    select: { assignedTo: true, clientId: true },
+    select: {
+      assignedTo: true,
+      clientId:   true,
+      action:     true,
+      triggerDay: true,
+      user: { select: { name: true, supervisorId: true } },
+      client: { select: { name: true } },
+    },
   });
   if (!task) return { error: "Задача не найдена" };
 
@@ -55,6 +63,28 @@ export async function completeTask(
       },
     });
   });
+
+  // In-app уведомление руководителю если задача выполнена подчинённым
+  const supervisorId = task.user?.supervisorId;
+  if (supervisorId && task.assignedTo !== session.id) {
+    // Кто-то чужой закрыл задачу — уведомим исходного исполнителя
+    await createNotification({
+      userId: task.assignedTo,
+      type:   "task_completed",
+      title:  `Задача закрыта: ${task.triggerDay ?? task.action.slice(0, 40)}`,
+      body:   `${task.client?.name ?? ""} — ${outcomeLabel}`,
+      href:   `/clients/${clientId}`,
+    });
+  }
+  if (supervisorId) {
+    await createNotification({
+      userId: supervisorId,
+      type:   "task_completed",
+      title:  `✅ ${session.name} закрыл задачу`,
+      body:   `${task.client?.name ?? ""} — ${outcomeLabel}`,
+      href:   `/clients/${clientId}`,
+    });
+  }
 
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/activation-desk");
