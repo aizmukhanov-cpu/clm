@@ -50,7 +50,7 @@ export async function getKAMPortfolio(filters: KAMFilters = {}) {
         manager: { select: { name: true } },
         kam:     { select: { id: true, name: true } },
         tasks: {
-          where: { status: { not: "DONE" } },
+          where: { status: { notIn: ["DONE", "CANCELLED"] as const } },
           orderBy: { dueDate: "asc" },
           take: 1,
         },

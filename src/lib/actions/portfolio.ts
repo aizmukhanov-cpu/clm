@@ -254,16 +254,16 @@ export async function getMyTasks(filters: MyTaskFilters = {}) {
   if (filters.status === "DONE") {
     where.status = "DONE";
   } else if (filters.status === "OVERDUE") {
-    where.status = { not: "DONE" };
+    where.status = { notIn: ["DONE", "CANCELLED"] as const };
     where.dueDate = { lt: now };
   } else if (filters.status === "TODAY") {
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay   = new Date(now); endOfDay.setHours(23, 59, 59, 999);
-    where.status = { not: "DONE" };
+    where.status = { notIn: ["DONE", "CANCELLED"] as const };
     where.dueDate = { gte: startOfDay, lte: endOfDay };
   } else if (filters.status === "PENDING" || !filters.status || filters.status === "ALL") {
     // default: open only
-    where.status = { not: "DONE" };
+    where.status = { notIn: ["DONE", "CANCELLED"] as const };
   }
   // "ALL_WITH_DONE" — показывает всё включая выполненные
 
@@ -280,9 +280,9 @@ export async function getMyTasks(filters: MyTaskFilters = {}) {
       skip: (page - 1) * TASKS_PAGE_SIZE,
       take: TASKS_PAGE_SIZE,
     }),
-    db.task.count({ where: { assignedTo: session.id, status: { not: "DONE" } } }),
-    db.task.count({ where: { assignedTo: session.id, status: { not: "DONE" }, dueDate: { lt: now } } }),
-    db.task.count({ where: { assignedTo: session.id, status: { not: "DONE" }, priority: "P1" } }),
+    db.task.count({ where: { assignedTo: session.id, status: { notIn: ["DONE", "CANCELLED"] as const } } }),
+    db.task.count({ where: { assignedTo: session.id, status: { notIn: ["DONE", "CANCELLED"] as const }, dueDate: { lt: now } } }),
+    db.task.count({ where: { assignedTo: session.id, status: { notIn: ["DONE", "CANCELLED"] as const }, priority: "P1" } }),
   ]);
 
   return {

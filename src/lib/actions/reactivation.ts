@@ -58,7 +58,7 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
         manager: { select: { name: true } },
         kam:     { select: { name: true } },
         tasks: {
-          where: { status: { not: "DONE" } },
+          where: { status: { notIn: ["DONE", "CANCELLED"] as const } },
           orderBy: { dueDate: "asc" },
           take: 1,
         },

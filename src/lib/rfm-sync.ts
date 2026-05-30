@@ -15,6 +15,29 @@ import { db } from "@/lib/db";
 import { calcCohort, calcStageTransition, calcSizeCategory } from "@/lib/clm-rules";
 import type { CohortKey, StageKey, SizeCategoryKey } from "@/lib/clm-rules";
 
+/**
+ * Возвращает triggerDay-идентификаторы задач, которые устарели при переходе
+ * из oldStage → newStage. Устаревшие задачи помечаются CANCELLED.
+ */
+export function getObsoleteTriggers(oldStage: string, newStage: string): string[] {
+  switch (`${oldStage}→${newStage}`) {
+    // Клиент сделал первую транзакцию → онбординговые задачи не нужны
+    case "ONBOARD→ACTIVATE":
+      return ["D+1", "D+3", "D+7", "D+14"];
+
+    // Клиент вернулся из реактивации → задачи реактивации не нужны
+    case "REACTIVATE→ACTIVATE":
+      return ["reactivation-30d", "reactivation-60d", "no-touch-30d"];
+
+    // Клиент вырос → задачи онбординга/активации не нужны
+    case "ACTIVATE→GROW":
+      return ["D+1", "D+3", "D+7", "D+14", "no-touch-30d"];
+
+    default:
+      return [];
+  }
+}
+
 export type RFMResult = {
   updated:     number;
   stageShifts: number;
@@ -92,6 +115,23 @@ export async function runRFMSync(): Promise<RFMResult> {
 
       if (stageChanged) {
         result.stageShifts++;
+
+        // Отменяем задачи устаревшие после смены стадии
+        const obsolete = getObsoleteTriggers(c.clmStage as StageKey, newStage!);
+        if (obsolete.length > 0) {
+          await db.task.updateMany({
+            where: {
+              clientId:   c.id,
+              triggerDay: { in: obsolete },
+              status:     { in: ["PENDING", "OVERDUE"] },
+            },
+            data: {
+              status: "CANCELLED",
+              result: `Авто-отмена: стадия изменена ${c.clmStage} → ${newStage}`,
+            },
+          });
+        }
+
         if (systemUser) {
           await db.changelog.create({
             data: {

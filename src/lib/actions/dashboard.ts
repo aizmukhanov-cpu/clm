@@ -32,7 +32,7 @@ export async function getDashboardData() {
     ...clientAccessWhere(session),
   };
 
-  const taskWhere: Record<string, unknown> = { status: { not: "DONE" } };
+  const taskWhere: Record<string, unknown> = { status: { notIn: ["DONE", "CANCELLED"] as const } };
 
   const now      = new Date();
   const week     = new Date(now);  week.setDate(week.getDate() - 7);

@@ -93,7 +93,7 @@ export default async function BranchDashboardPage({ params }: { params: Params }
       where: { client: { branchId: id }, status: "PENDING", dueDate: { gte: now } },
     }),
     db.task.count({
-      where: { client: { branchId: id }, status: { not: "DONE" }, dueDate: { lt: now } },
+      where: { client: { branchId: id }, status: { notIn: ["DONE", "CANCELLED"] as const }, dueDate: { lt: now } },
     }),
   ]);
 
@@ -124,7 +124,7 @@ export default async function BranchDashboardPage({ params }: { params: Params }
             where: { performedBy: mgr.id, performedAt: { gte: monthStart } },
           }),
           db.task.count({
-            where: { assignedTo: mgr.id, status: { not: "DONE" }, dueDate: { lt: now } },
+            where: { assignedTo: mgr.id, status: { notIn: ["DONE", "CANCELLED"] as const }, dueDate: { lt: now } },
           }),
         ]);
         return {

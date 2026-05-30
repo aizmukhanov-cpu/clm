@@ -60,6 +60,7 @@ enum TaskStatus {
   DONE
   OVERDUE
   ESCALATED
+  CANCELLED  // авто-отмена при смене стадии клиента
 }
 
 enum TaskPriority {

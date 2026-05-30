@@ -43,22 +43,26 @@ export async function getDeskTasks(filters: DeskFilters = {}) {
     where.assignedTo = filters.assignedTo;
   }
 
-  // Фильтр по статусу
+  // Фильтр по статусу; CANCELLED всегда скрыты — это системные записи аудита
+  const ACTIVE_STATUSES = { notIn: ["DONE", "CANCELLED"] as const };
   if (filters.status === "DONE") {
     where.status = "DONE";
   } else if (filters.status === "PENDING") {
-    where.status = { not: "DONE" };
+    where.status = ACTIVE_STATUSES;
   } else if (filters.status === "OVERDUE") {
-    where.status = { not: "DONE" };
+    where.status = ACTIVE_STATUSES;
     where.dueDate = { lt: now };
   } else if (filters.status === "ESCALATED") {
     where.status = "ESCALATED";
   } else if (filters.status === "TODAY") {
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay   = new Date(now); endOfDay.setHours(23, 59, 59, 999);
+    where.status = ACTIVE_STATUSES;
     where.dueDate = { gte: startOfDay, lte: endOfDay };
+  } else {
+    // ALL — показываем всё кроме CANCELLED
+    where.status = { not: "CANCELLED" };
   }
-  // ALL — показываем всё (включая DONE)
 
   const tasks = await db.task.findMany({
     where,
@@ -77,7 +81,7 @@ export async function getDeskTasks(filters: DeskFilters = {}) {
   // Статистика по открытым задачам (с учётом личного скоупа и стадии)
   const openTasks = await db.task.findMany({
     where: {
-      status: { not: "DONE" },
+      status: { notIn: ["DONE", "CANCELLED"] },
       client: clientFilter,
       ...taskScopeFilter(session),
     },

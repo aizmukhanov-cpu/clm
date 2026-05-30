@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ALLOWED } from "@/lib/clm-config";
 import { clientAccessWhere } from "@/lib/access";
+import { getObsoleteTriggers } from "@/lib/rfm-sync";
 
 export type ClientFilters = {
   search?: string;
@@ -91,7 +92,7 @@ export async function getClient(id: string) {
         include: { user: { select: { name: true } } },
       },
       tasks: {
-        where: { status: { not: "DONE" } },
+        where: { status: { notIn: ["DONE", "CANCELLED"] as const } },
         orderBy: { dueDate: "asc" },
         take: 20, // достаточно для NBA-дедупликации (6–8 event-trigger + до 6 шагов sequence)
       },
@@ -157,6 +158,22 @@ export async function changeStage(clientId: string, newStage: CLMStage) {
         newVal: newStage,
       },
     });
+
+    // Отменяем задачи устаревшие после смены стадии
+    const obsolete = getObsoleteTriggers(oldStage, newStage);
+    if (obsolete.length > 0) {
+      await tx.task.updateMany({
+        where: {
+          clientId,
+          triggerDay: { in: obsolete },
+          status:     { in: ["PENDING", "OVERDUE"] },
+        },
+        data: {
+          status: "CANCELLED",
+          result: `Авто-отмена: стадия изменена вручную ${oldStage} → ${newStage}`,
+        },
+      });
+    }
 
     // При переходе в ONBOARD → только Welcome (D+1).
     // D+3/D+7/D+14 создаёт event-triggers последовательно, если клиент всё ещё неактивен.

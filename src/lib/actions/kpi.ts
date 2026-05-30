@@ -77,10 +77,10 @@ async function calcManagerKPI(
       where: { managerId: m.id, isArchived: false, txnCount30d: { gte: 1 }, gmv30d: { gt: 100 } },
     }),
     db.task.count({
-      where: { assignedTo: m.id, status: { not: "DONE" }, dueDate: { gte: now } },
+      where: { assignedTo: m.id, status: { notIn: ["DONE", "CANCELLED"] as const }, dueDate: { gte: now } },
     }),
     db.task.count({
-      where: { assignedTo: m.id, status: { not: "DONE" }, dueDate: { lt: now } },
+      where: { assignedTo: m.id, status: { notIn: ["DONE", "CANCELLED"] as const }, dueDate: { lt: now } },
     }),
     db.task.count({
       where: { assignedTo: m.id, status: "DONE", updatedAt: { gte: monthStart } },

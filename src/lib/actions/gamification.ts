@@ -225,7 +225,7 @@ export async function getMyAchievements(): Promise<Achievement[] | null> {
     }),
     db.activity.count({ where: { performedBy: session.id, performedAt: { gte: monthStart } } }),
     db.task.count({
-      where: { assignedTo: session.id, status: { not: "DONE" }, dueDate: { lt: now } },
+      where: { assignedTo: session.id, status: { notIn: ["DONE", "CANCELLED"] as const }, dueDate: { lt: now } },
     }),
   ]);
 
