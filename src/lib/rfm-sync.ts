@@ -25,6 +25,10 @@ export function getObsoleteTriggers(oldStage: string, newStage: string): string[
     case "ONBOARD→ACTIVATE":
       return ["D+1", "D+3", "D+7", "D+14"];
 
+    // Клиент завис в ONBOARD 30+ дней → онбординг завершается, начинается реактивация
+    case "ONBOARD→REACTIVATE":
+      return ["D+1", "D+3", "D+7", "D+14"];
+
     // Клиент вернулся из реактивации → задачи реактивации не нужны
     case "REACTIVATE→ACTIVATE":
       return ["reactivation-30d", "reactivation-60d", "no-touch-30d"];
@@ -70,6 +74,7 @@ export async function runRFMSync(): Promise<RFMResult> {
       gmv30d:           true,
       sizeCategory:     true,
       activatedAt:      true,
+      onboardedAt:      true,
     },
   });
 
@@ -86,8 +91,23 @@ export async function runRFMSync(): Promise<RFMResult> {
       };
 
       const newCohort       = calcCohort(snapshot);
-      const newStage        = calcStageTransition(snapshot); // null = no change
       const newSizeCategory = calcSizeCategory(c.gmv30d) as SizeCategoryKey;
+
+      // Для ONBOARD-клиентов: если 30+ дней после онбординга и ни одной транзакции
+      // → переводим в REACTIVATE (клиент завис, нужна реактивация).
+      // calcStageTransition не знает об onboardedAt, обрабатываем здесь отдельно.
+      const ONBOARD_STALL_DAYS = 30;
+      const daysSinceOnboard   = c.onboardedAt
+        ? Math.floor((now.getTime() - new Date(c.onboardedAt).getTime()) / 86_400_000)
+        : -1;
+      const onboardStalled =
+        c.clmStage === "ONBOARD" &&
+        c.txnCount30d === 0 &&
+        daysSinceOnboard >= ONBOARD_STALL_DAYS;
+
+      const newStage = onboardStalled
+        ? ("REACTIVATE" as StageKey)
+        : calcStageTransition(snapshot); // null = no change
 
       const cohortChanged = newCohort !== c.clmCohort;
       const stageChanged  = newStage !== null && newStage !== c.clmStage;

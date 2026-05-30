@@ -2,8 +2,8 @@
 
 export const ALLOWED: Record<string, string[]> = {
   ACQUIRE:    ["ONBOARD"],
-  ONBOARD:    ["ACTIVATE"],
-  ACTIVATE:   ["GROW"],
+  ONBOARD:    ["ACTIVATE", "REACTIVATE"], // REACTIVATE: клиент завис без транзакций
+  ACTIVATE:   ["GROW", "REACTIVATE"],     // REACTIVATE: клиент ушёл из активации
   GROW:       ["REACTIVATE"],
   REACTIVATE: ["ACTIVATE"],
 };
