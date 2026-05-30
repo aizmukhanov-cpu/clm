@@ -87,7 +87,7 @@ export async function getClient(id: string) {
       kam:        { select: { id: true, name: true } },
       activities: {
         orderBy: { performedAt: "desc" },
-        take: 10,
+        take: 20,
         include: { user: { select: { name: true } } },
       },
       tasks: {

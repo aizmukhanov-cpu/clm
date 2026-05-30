@@ -53,6 +53,22 @@ const ACTIVITY_ICON: Record<string, string> = {
   VISIT:    "🏢",
 };
 
+const ACTIVITY_LABEL: Record<string, string> = {
+  CALL:     "Звонок",
+  MEETING:  "Встреча",
+  EMAIL:    "Email",
+  WHATSAPP: "WhatsApp",
+  VISIT:    "Визит",
+};
+
+const ACTIVITY_COLOR: Record<string, { bg: string; text: string }> = {
+  CALL:     { bg: "#eff6ff", text: "#1d4ed8" },
+  MEETING:  { bg: "#f0fdf4", text: "#15803d" },
+  EMAIL:    { bg: "#fdf4ff", text: "#7c3aed" },
+  WHATSAPP: { bg: "#f0fdf4", text: "#065f46" },
+  VISIT:    { bg: "#fff7ed", text: "#c2410c" },
+};
+
 const PRODUCT_LABELS: Record<string, string> = {
   MBUSINESS:      "MBusiness",
   MKASSA_POS:     "MKassa POS",
@@ -665,54 +681,108 @@ export default async function ClientPage({ params }: { params: Params }) {
         canEdit={canEdit || isKAM}
       />
 
-      {/* ── Лента взаимодействий ── */}
+      {/* ── Таблица взаимодействий ── */}
       {perms.activities ? (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-700">Взаимодействия</h3>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🗂</span>
+              <h3 className="text-sm font-semibold text-gray-800">История взаимодействий</h3>
+              <span className="text-[11px] text-gray-400 font-normal">
+                ({client.activities.length}{client.activities.length === 20 ? "+" : ""})
+              </span>
+            </div>
             <Link
               href={`/clients/${client.id}/activity/new`}
               className="text-xs px-3 py-1.5 rounded-lg font-medium text-white transition-opacity hover:opacity-90"
               style={{ background: "var(--mbank-green)" }}
             >
-              + Добавить взаимодействие
+              + Добавить
             </Link>
           </div>
 
           {client.activities.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">Взаимодействий пока нет</p>
+            <p className="text-sm text-gray-400 text-center py-10">Взаимодействий пока нет</p>
           ) : (
-            <div className="space-y-3">
-              {client.activities.map((a) => (
-                <div key={a.id} className="flex gap-3 py-3 border-b border-gray-50 last:border-0">
-                  <div className="text-xl shrink-0 mt-0.5">
-                    {ACTIVITY_ICON[a.type] ?? "📋"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-800">{a.result}</span>
-                      <span className="text-xs text-gray-400 shrink-0">
-                        {format(new Date(a.performedAt), "dd.MM.yyyy")}
-                      </span>
-                    </div>
-                    {a.product && (
-                      <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600">
-                        {PRODUCT_LABELS[a.product] ?? a.product}
-                      </span>
-                    )}
-                    {a.notes && (
-                      <p className="text-xs text-gray-500 mt-0.5 truncate">{a.notes}</p>
-                    )}
-                    <p className="text-xs text-gray-400 mt-0.5">{a.user.name}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/50">
+                  <th className="text-left text-[11px] font-medium text-gray-400 px-4 py-2.5 w-28">Тип</th>
+                  <th className="text-left text-[11px] font-medium text-gray-400 px-4 py-2.5 w-36">Дата</th>
+                  <th className="text-left text-[11px] font-medium text-gray-400 px-4 py-2.5">Результат / Заметки</th>
+                  <th className="text-left text-[11px] font-medium text-gray-400 px-4 py-2.5 w-32">Продукт</th>
+                  <th className="text-left text-[11px] font-medium text-gray-400 px-4 py-2.5 w-36">Менеджер</th>
+                </tr>
+              </thead>
+              <tbody>
+                {client.activities.map((a) => {
+                  const color = ACTIVITY_COLOR[a.type] ?? { bg: "#f3f4f6", text: "#374151" };
+                  const daysAgo = Math.floor(
+                    (Date.now() - new Date(a.performedAt).getTime()) / 86_400_000
+                  );
+                  const relativeTime =
+                    daysAgo === 0 ? "сегодня" :
+                    daysAgo === 1 ? "вчера" :
+                    `${daysAgo} дн. назад`;
+
+                  return (
+                    <tr
+                      key={a.id}
+                      className="border-b border-gray-50 last:border-0 hover:bg-gray-50/40 transition-colors"
+                    >
+                      {/* Тип */}
+                      <td className="px-4 py-3">
+                        <span
+                          className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
+                          style={{ background: color.bg, color: color.text }}
+                        >
+                          {ACTIVITY_ICON[a.type] ?? "📋"}
+                          {ACTIVITY_LABEL[a.type] ?? a.type}
+                        </span>
+                      </td>
+
+                      {/* Дата */}
+                      <td className="px-4 py-3">
+                        <div className="text-xs font-medium text-gray-700">
+                          {format(new Date(a.performedAt), "dd.MM.yyyy")}
+                        </div>
+                        <div className="text-[11px] text-gray-400">{relativeTime}</div>
+                      </td>
+
+                      {/* Результат + Заметки */}
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-gray-800 leading-snug">{a.result}</p>
+                        {a.notes && (
+                          <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{a.notes}</p>
+                        )}
+                      </td>
+
+                      {/* Продукт */}
+                      <td className="px-4 py-3">
+                        {a.product ? (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                            {PRODUCT_LABELS[a.product] ?? a.product}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-gray-300">—</span>
+                        )}
+                      </td>
+
+                      {/* Менеджер */}
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-gray-600">{a.user.name}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Взаимодействия</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">История взаимодействий</h3>
           <RestrictedSection label="" />
         </div>
       )}
