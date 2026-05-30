@@ -276,7 +276,7 @@ export async function runEventTriggers(): Promise<TriggerResult> {
     },
   });
 
-  // Для каждого клиента: получить существующие PENDING-задачи по triggerDay (rule id)
+  // Для каждого клиента: получить существующие PENDING/OVERDUE задачи по triggerDay
   const existingTasks = await db.task.findMany({
     where: {
       status:     { in: ["PENDING", "OVERDUE"] },
@@ -290,6 +290,36 @@ export async function runEventTriggers(): Promise<TriggerResult> {
   for (const t of existingTasks) {
     if (!existingByClient.has(t.clientId)) existingByClient.set(t.clientId, []);
     existingByClient.get(t.clientId)!.push(t.triggerDay!);
+  }
+
+  // Cooldown: для задач которые не должны создаваться сразу после выполнения.
+  // grow-account-plan — раз в 180 дней (пол-года), cross-sell — раз в 90 дней.
+  // Реализация: добавляем недавно выполненные задачи в existingByClient —
+  // тогда существующие условия !existing.includes(...) сработают как cooldown.
+  const COOLDOWN_DAYS: Record<string, number> = {
+    "grow-account-plan":    180,
+    "cross-sell-acquiring":  90,
+    "cross-sell-salary":     90,
+  };
+  const maxCooldown = Math.max(...Object.values(COOLDOWN_DAYS));
+  const cooldownCutoff = new Date(Date.now() - maxCooldown * 86_400_000);
+
+  const cooldownDoneTasks = await db.task.findMany({
+    where: {
+      triggerDay: { in: Object.keys(COOLDOWN_DAYS) },
+      status:     "DONE",
+      updatedAt:  { gte: cooldownCutoff },
+    },
+    select: { clientId: true, triggerDay: true, updatedAt: true },
+  });
+
+  for (const t of cooldownDoneTasks) {
+    const days   = COOLDOWN_DAYS[t.triggerDay!] ?? 90;
+    const cutoff = new Date(Date.now() - days * 86_400_000);
+    if (new Date(t.updatedAt) < cutoff) continue; // вне cooldown-окна этого триггера
+    if (!existingByClient.has(t.clientId)) existingByClient.set(t.clientId, []);
+    const arr = existingByClient.get(t.clientId)!;
+    if (!arr.includes(t.triggerDay!)) arr.push(t.triggerDay!);
   }
 
   // Все D+ задачи когда-либо созданные (любой статус включая DONE).
