@@ -45,16 +45,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reminded: 0 });
   }
 
-  // Group by assigned user
+  // Group by user.id (не по имени — у двух менеджеров может совпасть имя)
   const byUser = new Map<string, typeof tasks>();
   for (const t of tasks) {
-    if (!byUser.has(t.user.name)) byUser.set(t.user.name, []);
-    byUser.get(t.user.name)!.push(t);
+    if (!byUser.has(t.user.id)) byUser.set(t.user.id, []);
+    byUser.get(t.user.id)!.push(t);
   }
 
   // Send one notification per manager (or a summary if too many)
   const lines: string[] = [];
-  for (const [managerName, managerTasks] of byUser) {
+  for (const [, managerTasks] of byUser) {
+    const managerName = managerTasks[0].user.name;
     lines.push(`\n👤 <b>${managerName}</b> (${managerTasks.length} задач):`);
     for (const t of managerTasks.slice(0, 5)) {
       const priority = t.priority === "P1" ? "🔴" : t.priority === "P2" ? "🟡" : "🔵";

@@ -40,6 +40,12 @@ export async function completeTask(
   });
   if (!task) return { error: "Задача не найдена" };
 
+  // Тип активности: встреча для review-задач, звонок для остальных
+  const MEETING_TRIGGERS = new Set([
+    "grow-account-plan", "qbr-overdue", "kam-review-60d",
+  ]);
+  const activityType = MEETING_TRIGGERS.has(task.triggerDay ?? "") ? "MEETING" : "CALL";
+
   // Итоговый текст: "✅ Транзакция уже прошла — позвонил, договорились о встрече"
   const fullResult = comment.trim()
     ? `${outcomeLabel} — ${comment.trim()}`
@@ -56,7 +62,7 @@ export async function completeTask(
     await tx.activity.create({
       data: {
         clientId,
-        type: "CALL",
+        type: activityType,
         result: fullResult,
         performedBy: session.id,
         performedAt: new Date(),

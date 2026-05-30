@@ -120,8 +120,14 @@ export async function changeStage(clientId: string, newStage: CLMStage) {
   const session = await getSession();
   if (!session) return { error: "Не авторизован" };
 
-  // Только ADMIN и ANALYST могут менять стадию
-  if (session.role !== UserRole.ADMIN && session.role !== "ANALYST") {
+  // ADMIN/ANALYST — все переходы
+  // TEAM_LEAD/SUPERVISOR — ACQUIRE→ONBOARD + ручная эскалация в REACTIVATE
+  // SPECIALIST/KAM — только ACQUIRE→ONBOARD (открытие счёта после выигранной сделки)
+  const isAdmin    = session.role === UserRole.ADMIN || session.role === "ANALYST";
+  const isLead     = session.role === "TEAM_LEAD" || session.role === "SUPERVISOR";
+  const isWorker   = session.role === "SPECIALIST" || session.role === "KAM";
+
+  if (!isAdmin && !isLead && !isWorker) {
     return { error: "Недостаточно прав" };
   }
 
@@ -134,6 +140,22 @@ export async function changeStage(clientId: string, newStage: CLMStage) {
   const allowed = ALLOWED[client.clmStage] ?? [];
   if (!allowed.includes(newStage)) {
     return { error: `Переход ${client.clmStage} → ${newStage} недопустим` };
+  }
+
+  // Ограничения по роли: не-ADMIN могут только открывать счёт или эскалировать в реактивацию
+  if (!isAdmin) {
+    const allowedTransitions: Record<string, string[]> = {
+      // SPECIALIST и KAM: только открытие счёта
+      SPECIALIST: [`ACQUIRE→ONBOARD`],
+      KAM:        [`ACQUIRE→ONBOARD`],
+      // TEAM_LEAD/SUPERVISOR: открытие счёта + эскалация
+      TEAM_LEAD:  [`ACQUIRE→ONBOARD`, `ONBOARD→REACTIVATE`, `ACTIVATE→REACTIVATE`],
+      SUPERVISOR: [`ACQUIRE→ONBOARD`, `ONBOARD→REACTIVATE`, `ACTIVATE→REACTIVATE`],
+    };
+    const key = `${client.clmStage}→${newStage}`;
+    if (!allowedTransitions[session.role]?.includes(key)) {
+      return { error: `Роль ${session.role} не может выполнить переход ${client.clmStage} → ${newStage}` };
+    }
   }
 
   const oldStage = client.clmStage;

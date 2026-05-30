@@ -145,7 +145,7 @@ const TRIGGER_RULES: TriggerRule[] = [
       c.daysSinceLastTxn >= 60 &&
       c.clmStage !== "ACQUIRE" &&
       !existing.includes("reactivation-60d"),
-    action:   "P1 ЭСКАЛАЦИЯ: 60 дней без транзакций. Срочная встреча + переключить на KAM",
+    action:   "P1 ЭСКАЛАЦИЯ: 60 дней без транзакций. Срочная встреча — выяснить причину оттока",
     daysUntilDue: 0,
     assignTo: (c) => c.kamId ?? c.managerId,
   },
@@ -206,11 +206,10 @@ const TRIGGER_RULES: TriggerRule[] = [
     priority: "P2",
     condition: (c, existing) =>
       c.clmStage === "GROW" &&
-      c.kamId !== null &&
       !existing.includes("grow-account-plan"),
     action:   "Заполнить Account Plan: поставить revenue target, запланировать следующую встречу",
     daysUntilDue: 14,
-    assignTo: (c) => c.kamId ?? c.managerId,
+    assignTo: (c) => c.kamId ?? c.managerId, // KAM если есть, иначе обычный менеджер
   },
 
   // ── QBR ПРОСРОЧЕН (#9 P2) ────────────────────────────────

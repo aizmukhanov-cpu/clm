@@ -31,6 +31,7 @@
 
 import { db } from "@/lib/db";
 import { sendNotification } from "@/lib/notifications";
+import { createNotification } from "@/lib/notify";
 import { calcSizeCategory, HANDOFF_TARGET_TEAM, HANDOFF_DAYS } from "@/lib/clm-rules";
 import type { SizeCategoryKey } from "@/lib/clm-rules";
 
@@ -192,6 +193,37 @@ export async function runHunterHandoff(): Promise<HandoffResult> {
           });
         }
       }
+
+      // Переназначаем открытые задачи от старого менеджера новому
+      if (oldManagerId) {
+        await db.task.updateMany({
+          where: {
+            clientId:   client.id,
+            assignedTo: oldManagerId,
+            status:     { in: ["PENDING", "OVERDUE"] },
+          },
+          data: { assignedTo: target.id },
+        });
+      }
+
+      // In-app уведомление старому КМ о передаче
+      if (oldManagerId) {
+        await createNotification({
+          userId: oldManagerId,
+          type:   "client_assigned",
+          title:  `Клиент передан: ${client.name}`,
+          body:   `Передан в команду ${targetTeam} → ${target.name}`,
+          href:   `/clients/${client.id}`,
+        });
+      }
+      // Уведомление новому менеджеру о новом клиенте
+      await createNotification({
+        userId: target.id,
+        type:   "client_assigned",
+        title:  `Новый клиент: ${client.name}`,
+        body:   `Передан от ${oldManagerName} (${oldTeam})`,
+        href:   `/clients/${client.id}`,
+      });
 
       // Update in-memory load counter so subsequent picks stay balanced
       loadMap.set(target.id, (loadMap.get(target.id) ?? 0) + 1);
