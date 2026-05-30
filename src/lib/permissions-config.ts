@@ -90,12 +90,12 @@ export const DEFAULT_PERMISSIONS: Record<ConfigurableRole, Record<PermissionReso
     changelog:   true,
   },
   KAM: {
-    financials:  false,
-    credit:      false,
-    txn_metrics: false,
+    financials:  true,
+    credit:      true,
+    txn_metrics: true,
     activities:  true,
     tasks:       true,
-    changelog:   false,
+    changelog:   true,
   },
 };
 
