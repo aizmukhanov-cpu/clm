@@ -10,6 +10,7 @@ async function DeskContent({ sp }: { sp: Record<string, string> }) {
     triggerDay: sp.triggerDay,
     assignedTo: sp.assignedTo,
     status:     sp.status,
+    clmStage:   sp.clmStage,
   };
 
   const { tasks, stats, assignees } = await getDeskTasks(filters);
@@ -29,7 +30,7 @@ export default async function ActivationDeskPage({
       <div>
         <h2 className="text-xl font-bold text-gray-900">Activation Desk</h2>
         <p className="text-sm text-gray-400 mt-0.5">
-          Задачи по клиентам в стадии Онбординг и Активация
+          Все активные задачи по клиентам — онбординг, активация, реактивация, кросс-продажи
         </p>
       </div>
 

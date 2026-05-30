@@ -7,7 +7,7 @@ import { format } from "date-fns";
 import { completeTask } from "@/lib/actions/tasks";
 import { STAGE_LABELS } from "@/lib/clm-config";
 import type { CLMStage } from "@/generated/prisma/client";
-import { taskLabel, TASK_PRIORITY_LABEL } from "@/lib/task-labels";
+import { taskLabel, TASK_PRIORITY_LABEL, TRIGGER_LABELS } from "@/lib/task-labels";
 
 type Task = {
   id: string;
@@ -30,7 +30,15 @@ const PRIORITY_STYLE: Record<string, { bg: string; text: string }> = {
   P3: { bg: "var(--mbank-green-pale)", text: "var(--mbank-green)" },
 };
 
-const TRIGGER_DAYS = ["D+1", "D+3", "D+7", "D+14"];
+// Группы триггеров для фильтра (ключи из TRIGGER_LABELS + D+ онбординг)
+const TRIGGER_GROUPS: { label: string; keys: string[] }[] = [
+  { label: "Онбординг",     keys: ["D+1", "D+3", "D+7", "D+14"] },
+  { label: "Реактивация",   keys: ["reactivation-30d", "reactivation-60d"] },
+  { label: "Касание",       keys: ["no-touch-30d"] },
+  { label: "Кросс-продажи", keys: ["cross-sell-acquiring", "cross-sell-salary"] },
+  { label: "KAM / Account", keys: ["kam-review-60d", "qbr-overdue", "grow-account-plan"] },
+  { label: "Прочее",        keys: ["unowned-client", "handoff", "ghosting-auto-close"] },
+];
 
 /* ── Модалка выполнения задачи ─────────────────────────── */
 function CompleteModal({
@@ -186,13 +194,31 @@ export function DeskTable({
           </select>
 
           <select
+            value={sp.get("clmStage") ?? "ALL"}
+            onChange={(e) => push({ clmStage: e.target.value })}
+            className="h-8 rounded-lg border border-gray-200 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--mbank-green)]"
+          >
+            <option value="ALL">Все стадии</option>
+            <option value="ONBOARD">Онбординг</option>
+            <option value="ACTIVATE">Активация</option>
+            <option value="GROW">Рост</option>
+            <option value="REACTIVATE">Реактивация</option>
+          </select>
+
+          <select
             value={sp.get("triggerDay") ?? "ALL"}
             onChange={(e) => push({ triggerDay: e.target.value })}
             className="h-8 rounded-lg border border-gray-200 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--mbank-green)]"
           >
             <option value="ALL">Все триггеры</option>
-            {TRIGGER_DAYS.map((d) => (
-              <option key={d} value={d}>{d}</option>
+            {TRIGGER_GROUPS.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.keys.map((k) => (
+                  <option key={k} value={k}>
+                    {TRIGGER_LABELS[k] ?? k}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
 

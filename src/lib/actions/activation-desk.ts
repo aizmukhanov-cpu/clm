@@ -10,6 +10,7 @@ export type DeskFilters = {
   triggerDay?: string;
   assignedTo?: string;
   status?:     string;
+  clmStage?:   string; // фильтр по стадии CLM (ALL = показывать все стадии)
 };
 
 export async function getDeskTasks(filters: DeskFilters = {}) {
@@ -18,11 +19,15 @@ export async function getDeskTasks(filters: DeskFilters = {}) {
 
   const now = new Date();
 
-  // Client-level filter: только релевантные стадии
+  // Client-level filter: показываем задачи для ВСЕХ стадий,
+  // фильтр по стадии опциональный (через UI).
+  // Ранее было жёстко ONBOARD+ACTIVATE — задачи для GROW и REACTIVATE были невидимы.
   const clientFilter: Record<string, unknown> = {
     isArchived: false,
-    clmStage: { in: [CLMStage.ONBOARD, CLMStage.ACTIVATE] },
   };
+  if (filters.clmStage && filters.clmStage !== "ALL") {
+    clientFilter.clmStage = filters.clmStage as CLMStage;
+  }
 
   const where: Record<string, unknown> = {
     client: clientFilter,
@@ -69,7 +74,7 @@ export async function getDeskTasks(filters: DeskFilters = {}) {
     take: 300,
   });
 
-  // Статистика по открытым задачам (с учётом личного скоупа)
+  // Статистика по открытым задачам (с учётом личного скоупа и стадии)
   const openTasks = await db.task.findMany({
     where: {
       status: { not: "DONE" },
