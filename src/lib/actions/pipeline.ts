@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { UserRole, DealStatus } from "@/generated/prisma/client";
 import { revalidatePath } from "next/cache";
 import { PIPELINE_STAGES, B2B_STAGES, BRANCH_STAGES } from "@/lib/pipeline-config";
+import { createNotification } from "@/lib/notify";
 
 export type PipelineFilters = {
   ownerId?: string;
@@ -262,6 +263,13 @@ export async function closeDeal(
             });
           }
         });
+        await createNotification({
+          userId: deal.ownerId,
+          type:   "client_assigned",
+          title:  "Счёт открыт — клиент переведён в ONBOARD",
+          body:   deal.leadName ?? "Начинается онбординг",
+          href:   `/clients/${deal.clientId}`,
+        });
       }
     } else {
       // Нет clientId — создаём клиента из лида (B2B или KM без ИНН в базе)
@@ -279,6 +287,53 @@ export async function closeDeal(
         const maybeClient = await db.client.findUnique({ where: { inn }, select: { id: true } });
         if (maybeClient) {
           linkedClientId = maybeClient.id;
+          // Если клиент в ACQUIRE — переводим в ONBOARD (тот же флоу, что при closeDeal с clientId)
+          const maybeExisting = await db.client.findUnique({
+            where: { id: maybeClient.id },
+            select: { clmStage: true, managerId: true },
+          });
+          if (maybeExisting?.clmStage === "ACQUIRE") {
+            const assignedTo = maybeExisting.managerId ?? deal.ownerId;
+            await db.$transaction(async (tx) => {
+              await tx.client.update({
+                where: { id: maybeClient.id },
+                data: { clmStage: "ONBOARD", onboardedAt: new Date() },
+              });
+              await tx.changelog.create({
+                data: {
+                  clientId:  maybeClient.id,
+                  changedBy: session.id,
+                  field:     "clmStage",
+                  oldVal:    "ACQUIRE",
+                  newVal:    "ONBOARD",
+                },
+              });
+              const alreadyWelcome = await tx.task.count({
+                where: { clientId: maybeClient.id, triggerDay: "D+1", status: { in: ["PENDING", "OVERDUE"] } },
+              });
+              if (alreadyWelcome === 0) {
+                const due = new Date();
+                due.setDate(due.getDate() + 1);
+                await tx.task.create({
+                  data: {
+                    clientId:   maybeClient.id,
+                    triggerDay: "D+1",
+                    assignedTo,
+                    dueDate:    due,
+                    priority:   "P3",
+                    action:     "Welcome — помочь с настройкой MBusiness",
+                  },
+                });
+              }
+            });
+            await createNotification({
+              userId: deal.ownerId,
+              type:   "client_assigned",
+              title:  "Счёт открыт — клиент переведён в ONBOARD",
+              body:   deal.leadName ?? `ИНН ${inn}`,
+              href:   `/clients/${maybeClient.id}`,
+            });
+          }
         } else {
           // Создаём нового клиента
           const owner = await db.user.findUnique({
@@ -324,6 +379,13 @@ export async function closeDeal(
               return c;
             });
             linkedClientId = newClient.id;
+            await createNotification({
+              userId: deal.ownerId,
+              type:   "client_assigned",
+              title:  `Новый клиент: ${newClient.name}`,
+              body:   "Создан из пайплайна, стадия ONBOARD",
+              href:   `/clients/${newClient.id}`,
+            });
           }
         }
       }

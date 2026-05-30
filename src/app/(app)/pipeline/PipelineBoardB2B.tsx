@@ -44,6 +44,7 @@ function DealCard({ deal }: { deal: Deal }) {
   const [pending, startTransition] = useTransition();
   const [closing, setClosing] = useState(false);
   const [lostReason, setLostReason] = useState("");
+  const [wonClientId, setWonClientId] = useState<string | null>(null);
 
   const stage = deal.stage as B2BStage;
   const next  = nextB2BStage(stage);
@@ -132,8 +133,21 @@ function DealCard({ deal }: { deal: Deal }) {
         <span>{deal.owner.name.split(" ")[0]}</span>
       </div>
 
+      {/* Won banner */}
+      {wonClientId && (
+        <div className="pt-1 border-t border-emerald-100 bg-emerald-50 -mx-3 -mb-3 px-3 pb-3 rounded-b-lg">
+          <p className="text-[11px] text-emerald-700 font-medium mb-1">🎉 Счёт открыт! Клиент переведён в ONBOARD</p>
+          <Link
+            href={`/clients/${wonClientId}`}
+            className="text-[11px] underline text-emerald-700 hover:text-emerald-900"
+          >
+            → Перейти к карточке клиента
+          </Link>
+        </div>
+      )}
+
       {/* Actions */}
-      {!closing ? (
+      {!wonClientId && !closing ? (
         <div className="flex items-center gap-1.5 pt-1 border-t border-gray-50">
           {next && (
             <button
@@ -146,7 +160,10 @@ function DealCard({ deal }: { deal: Deal }) {
             </button>
           )}
           <button
-            onClick={() => startTransition(async () => { await closeDeal(deal.id, "WON", null, "B2B"); })}
+            onClick={() => startTransition(async () => {
+              const res = await closeDeal(deal.id, "WON", null, "B2B");
+              if (res?.clientId) setWonClientId(res.clientId);
+            })}
             disabled={pending}
             className="py-1 px-2 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 disabled:opacity-40"
           >
@@ -160,7 +177,7 @@ function DealCard({ deal }: { deal: Deal }) {
             ✗ Отказ
           </button>
         </div>
-      ) : (
+      ) : !wonClientId && closing ? (
         <div className="pt-1 border-t border-gray-50 space-y-1.5">
           <input
             value={lostReason}
@@ -181,7 +198,7 @@ function DealCard({ deal }: { deal: Deal }) {
             </button>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
