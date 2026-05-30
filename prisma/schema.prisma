@@ -234,6 +234,11 @@ model Client {
   hasPayroll       Boolean @default(false) @map("has_payroll")
   hasCorporateCard Boolean @default(false) @map("has_corporate_card")
 
+  // АБС-синк: дата последней синхронизации продуктов из банковской системы.
+  // Когда поле заполнено, ручное изменение продуктов требует явного подтверждения
+  // и логируется с признаком "manual_override".
+  productSyncedAt  DateTime? @map("product_synced_at")
+
   notes            String?  // Свободные заметки менеджера о клиенте
 
   branch         Branch          @relation(fields: [branchId], references: [id])

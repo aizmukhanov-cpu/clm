@@ -553,6 +553,7 @@ export default async function ClientPage({ params }: { params: Params }) {
           {canEdit ? (
             <ProductEditor
               clientId={client.id}
+              productSyncedAt={client.productSyncedAt ?? null}
               initial={{
                 hasMBusiness:     client.hasMBusiness,
                 hasMKassaPos:     client.hasMKassaPos,
