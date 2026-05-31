@@ -23,16 +23,49 @@ async function main() {
   // Пользователи (пароль = "password123" — bcrypt hash для теста)
   const PASS = "$2b$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0Z9S6YfMp0i";
 
+  // Шаг 1: пользователи без FK-зависимостей между собой
   const users = await Promise.all([
-    db.user.upsert({ where: { email: "admin@mbank.kg" },   update: { team: TeamType.VB }, create: { id: "user-admin",   name: "Адал И.",        email: "admin@mbank.kg",   role: UserRole.ADMIN,    team: TeamType.VB, branchId: "branch-bishkek", passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "analyst@mbank.kg" }, update: {}, create: { id: "user-analyst", name: "Айгуль К.",      email: "analyst@mbank.kg", role: UserRole.ANALYST,  team: TeamType.VB,  branchId: "branch-bishkek", passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "b2b@mbank.kg" },     update: {}, create: { id: "user-b2b",     name: "Бекзат М.",      email: "b2b@mbank.kg",     role: UserRole.SPECIALIST,  team: TeamType.B2B, branchId: "branch-osh",     passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "km@mbank.kg" },      update: {}, create: { id: "user-km",      name: "Динара Т.",      email: "km@mbank.kg",      role: UserRole.SPECIALIST,  team: TeamType.KM,  branchId: "branch-bishkek", passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "kam@mbank.kg" },     update: {}, create: { id: "user-kam",     name: "Нурлан О.",      email: "kam@mbank.kg",     role: UserRole.KAM, team: TeamType.KAM,    branchId: "branch-bishkek", passwordHash: PASS } }),
-    db.user.upsert({ where: { email: "branch@mbank.kg" }, update: {}, create: { id: "user-branch", name: "Гүлзат Р.",      email: "branch@mbank.kg",  role: UserRole.SPECIALIST,  team: TeamType.BRANCH, branchId: "branch-karakol", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "admin@mbank.kg" },    update: { team: TeamType.VB }, create: { id: "user-admin",     name: "Адал И.",        email: "admin@mbank.kg",    role: UserRole.ADMIN,     team: TeamType.VB,    branchId: "branch-bishkek", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "analyst@mbank.kg" },  update: {}, create: { id: "user-analyst",   name: "Айгуль К.",      email: "analyst@mbank.kg",  role: UserRole.ANALYST,   team: TeamType.VB,    branchId: "branch-bishkek", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "b2b@mbank.kg" },      update: {}, create: { id: "user-b2b",       name: "Бекзат М.",      email: "b2b@mbank.kg",      role: UserRole.SPECIALIST, team: TeamType.B2B,   branchId: "branch-osh",     passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "km@mbank.kg" },       update: {}, create: { id: "user-km",        name: "Динара Т.",      email: "km@mbank.kg",       role: UserRole.SPECIALIST, team: TeamType.KM,    branchId: "branch-bishkek", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "kam@mbank.kg" },      update: {}, create: { id: "user-kam",       name: "Нурлан О.",      email: "kam@mbank.kg",      role: UserRole.KAM,        team: TeamType.KAM,   branchId: "branch-bishkek", passwordHash: PASS } }),
+    db.user.upsert({ where: { email: "branch@mbank.kg" },   update: {}, create: { id: "user-branch",    name: "Гүлзат Р.",      email: "branch@mbank.kg",   role: UserRole.SPECIALIST, team: TeamType.BRANCH, branchId: "branch-karakol", passwordHash: PASS } }),
+    // ── Новые роли ─────────────────────────────────────────────────────────
+    // DIRECTOR: read-only доступ ко всем командам + KPI
+    db.user.upsert({ where: { email: "director@mbank.kg" }, update: {}, create: { id: "user-director",  name: "Максат Б.",      email: "director@mbank.kg", role: UserRole.DIRECTOR,  team: TeamType.KAM,   branchId: "branch-bishkek", passwordHash: PASS } }),
+    // TEAM_LEAD: вся KM-команда (верхний уровень иерархии КМ)
+    db.user.upsert({ where: { email: "teamlead@mbank.kg" }, update: {}, create: { id: "user-teamlead",  name: "Жылдыз А.",      email: "teamlead@mbank.kg", role: UserRole.TEAM_LEAD, team: TeamType.KM,    branchId: "branch-bishkek", passwordHash: PASS } }),
+    // SPECIALIST (VB): сотрудник колл-центра (реактивация всех клиентов банка)
+    db.user.upsert({ where: { email: "vb@mbank.kg" },       update: {}, create: { id: "user-vb",        name: "Айбек Д.",       email: "vb@mbank.kg",       role: UserRole.SPECIALIST, team: TeamType.VB,    branchId: "branch-bishkek", passwordHash: PASS } }),
   ]);
 
-  console.log(`✓ ${users.length} users`);
+  console.log(`✓ ${users.length} users (batch 1)`);
+
+  // Шаг 2: SUPERVISOR зависит от user-teamlead (FK supervisorId), создаём отдельно
+  await db.user.upsert({
+    where:  { email: "supervisor@mbank.kg" },
+    update: {},
+    create: {
+      id:           "user-supervisor",
+      name:         "Санат Э.",
+      email:        "supervisor@mbank.kg",
+      role:         UserRole.SUPERVISOR,
+      team:         TeamType.KM,
+      branchId:     "branch-bishkek",
+      passwordHash: PASS,
+      supervisorId: "user-teamlead", // руководитель Supervisor — Team Lead
+    },
+  });
+
+  // Шаг 3: привязываем KM-специалиста к Supervisor (supervisorId = user-supervisor)
+  // Это даёт Supervisor-у видимость клиентов Динары Т. в teamWorkFilter
+  await db.user.update({
+    where: { email: "km@mbank.kg" },
+    data:  { supervisorId: "user-supervisor" },
+  });
+
+  console.log("✓ SUPERVISOR + иерархия KM привязана (teamlead → supervisor → km)");
 
   // Тестовые клиенты
   const clientsData = [
