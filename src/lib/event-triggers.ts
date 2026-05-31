@@ -187,12 +187,17 @@ const TRIGGER_RULES: TriggerRule[] = [
     priority: "P1",
     condition: (c, existing) => {
       if (!c.kamId) return false;
+      if (existing.includes("kam-review-60d")) return false;
       const lastActivity = c.activities[0];
-      if (!lastActivity) return !existing.includes("kam-review-60d");
+      if (!lastActivity) {
+        // Нет ни одной активности — триггерим только если клиент в системе 60+ дней.
+        // Иначе новый KAM-клиент (день 0) сразу получает P1 «60 дней без контакта».
+        return daysSinceOnboard(c) >= 60;
+      }
       const days = Math.floor(
         (Date.now() - new Date(lastActivity.performedAt).getTime()) / 86_400_000
       );
-      return days >= 60 && !existing.includes("kam-review-60d");
+      return days >= 60;
     },
     action:   "Account Review: 60+ дней без контакта с KAM-клиентом. Встреча обязательна",
     daysUntilDue: 0,
