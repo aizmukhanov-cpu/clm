@@ -92,7 +92,7 @@ const TRIGGER_RULES: TriggerRule[] = [
       daysSinceOnboard(c) >= 3,
     action:      "Первая транзакция? Позвонить, убрать барьер",
     daysUntilDue: 1,
-    assignTo: (c) => c.managerId,
+    assignTo: (c) => c.kamId ?? c.managerId,
   },
   {
     id:       "D+7",
@@ -106,7 +106,7 @@ const TRIGGER_RULES: TriggerRule[] = [
       daysSinceOnboard(c) >= 7,
     action:      "Нет транзакций — выяснить причину",
     daysUntilDue: 1,
-    assignTo: (c) => c.managerId,
+    assignTo: (c) => c.kamId ?? c.managerId,
   },
   {
     id:       "D+14",
@@ -120,7 +120,7 @@ const TRIGGER_RULES: TriggerRule[] = [
       daysSinceOnboard(c) >= 14,
     action:      "Эскалация — нет транзакций 14 дней, передать в реактивацию",
     daysUntilDue: 0,
-    assignTo: (c) => c.managerId,
+    assignTo: (c) => c.kamId ?? c.managerId,
   },
 
   // ── РЕАКТИВАЦИЯ ─────────────────────────────────────────
@@ -135,7 +135,7 @@ const TRIGGER_RULES: TriggerRule[] = [
       !existing.includes("reactivation-60d"), // не создавать 30d если уже есть 60d (эскалация)
     action:   "Первый звонок реактивации — выяснить причину отсутствия активности",
     daysUntilDue: 1,
-    assignTo: (c) => c.managerId,
+    assignTo: (c) => c.kamId ?? c.managerId,
   },
   {
     id:       "reactivation-60d",
@@ -162,7 +162,7 @@ const TRIGGER_RULES: TriggerRule[] = [
       !existing.includes("cross-sell-acquiring"),
     action:   "Предложить эквайринг MKassa: клиент активен с GMV >100K, нет POS/QR",
     daysUntilDue: 3,
-    assignTo: (c) => c.managerId,
+    assignTo: (c) => c.kamId ?? c.managerId,
   },
   {
     id:       "cross-sell-salary",
@@ -175,7 +175,7 @@ const TRIGGER_RULES: TriggerRule[] = [
       !existing.includes("cross-sell-salary"),
     action:   "Предложить зарплатный проект: GMV >200K, продукт отсутствует",
     daysUntilDue: 5,
-    assignTo: (c) => c.managerId,
+    assignTo: (c) => c.kamId ?? c.managerId,
   },
   // cross-sell-mbusiness намеренно убран из авто-задач (P3, слишком широкое условие).
   // Рекомендация по MBusiness остаётся в NBA (nba.ts) как подсказка без создания задачи.
@@ -234,8 +234,9 @@ const TRIGGER_RULES: TriggerRule[] = [
     priority: "P3",
     condition: (c, existing) => {
       if (c.clmStage === "ACQUIRE") return false;
-      // Если уже есть задача реактивации — та включает звонок клиенту, no-touch избыточен
+      // Если уже есть задача реактивации или KAM Account Review — no-touch избыточен
       if (existing.includes("reactivation-30d") || existing.includes("reactivation-60d")) return false;
+      if (existing.includes("kam-review-60d")) return false; // KAM-6: kam-review перекрывает no-touch
       if (existing.includes("no-touch-30d")) return false;
       const lastActivity = c.activities[0];
       if (!lastActivity) return true;
@@ -299,6 +300,7 @@ export async function runEventTriggers(): Promise<TriggerResult> {
     "grow-account-plan":    180,
     "cross-sell-acquiring":  90,
     "cross-sell-salary":     90,
+    "qbr-overdue":           90,  // KAM-5: не создавать снова ранее чем через 90 дней после выполнения
   };
   const maxCooldown = Math.max(...Object.values(COOLDOWN_DAYS));
   const cooldownCutoff = new Date(Date.now() - maxCooldown * 86_400_000);
@@ -386,6 +388,18 @@ export async function runEventTriggers(): Promise<TriggerResult> {
           body:   client.name,
           href:   `/clients/${client.id}`,
         });
+
+        // KAM-6: kam-review-60d перекрывает no-touch-30d — отменяем дублирующую задачу
+        if (rule.id === "kam-review-60d") {
+          await db.task.updateMany({
+            where: {
+              clientId:   client.id,
+              triggerDay: "no-touch-30d",
+              status:     { in: ["PENDING", "OVERDUE"] },
+            },
+            data: { status: "CANCELLED" },
+          });
+        }
 
         existing.push(rule.id); // prevent double-trigger in same run
         result.tasksCreated++;
