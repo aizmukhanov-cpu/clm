@@ -36,9 +36,10 @@ export async function getKAMPortfolio(filters: KAMFilters = {}) {
   }
   if (filters.cohort && filters.cohort !== "ALL") where.clmCohort = filters.cohort;
 
-  // KAM filter: только admin/analyst может фильтровать по конкретному KAM
-  if (filters.kamId && filters.kamId !== "ALL" &&
-      session.role !== "KAM") {
+  // KAM-7: KAM видит только свой портфель; ADMIN/ANALYST могут фильтровать по любому KAM
+  if (session.role === "KAM") {
+    where.kamId = session.id;
+  } else if (filters.kamId && filters.kamId !== "ALL") {
     where.kamId = filters.kamId;
   }
 
@@ -76,7 +77,8 @@ export async function getKAMPortfolio(filters: KAMFilters = {}) {
   // Portfolio stats — same access scope
   const statsWhere: Record<string, unknown> = {
     isArchived: false,
-    kamId: { not: null },
+    // KAM-7: KAM считает статистику только по своему портфелю
+    kamId: session.role === "KAM" ? session.id : { not: null },
     ...clientAccessWhere(session),
   };
 
