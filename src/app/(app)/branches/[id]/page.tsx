@@ -60,12 +60,13 @@ export default async function BranchDashboardPage({ params }: { params: Params }
 
   if (!branch) notFound();
 
-  // Access control: ADMIN sees all, DIRECTOR/TEAM_LEAD can see their branch
+  // Access control: ADMIN/DIRECTOR/ANALYST — все; TEAM_LEAD/SUPERVISOR/SPECIALIST — только свой филиал
+  const isMemberOfBranch = branch.users.some(u => u.id === session.id);
   const canView =
     session.role === "ADMIN" ||
     session.role === "DIRECTOR" ||
     session.role === "ANALYST" ||
-    (session.role === "TEAM_LEAD" && branch.users.some(u => u.id === session.id));
+    (["TEAM_LEAD", "SUPERVISOR", "SPECIALIST"].includes(session.role) && isMemberOfBranch); // BRANCH-4
 
   if (!canView) redirect("/branches");
 
