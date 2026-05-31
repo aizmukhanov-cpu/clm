@@ -92,7 +92,8 @@ async function calcManagerKPI(
       where: { performedBy: m.id, performedAt: { gte: prevStart, lte: prevEnd } },
     }),
     db.changelog.count({
-      where: { changedBy: m.id, field: "clmStage", newVal: "ACTIVATE", changedAt: { gte: monthStart } },
+      // BRANCH-6: считаем ВСЕ активации клиентов менеджера (ручные + авто CLM sync)
+      where: { field: "clmStage", newVal: "ACTIVATE", changedAt: { gte: monthStart }, client: { managerId: m.id } },
     }),
   ]);
 

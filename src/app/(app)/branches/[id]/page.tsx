@@ -115,10 +115,12 @@ export default async function BranchDashboardPage({ params }: { params: Params }
       .filter(u => ["SPECIALIST", "KAM", "SUPERVISOR"].includes(u.role))
       .map(async (mgr) => {
         const [activations, activities, overdue] = await Promise.all([
+          // BRANCH-6: считаем ВСЕ активации клиентов (ручные + авто CLM sync)
           db.changelog.count({
             where: {
-              changedBy: mgr.id, field: "clmStage", newVal: "ACTIVATE",
+              field: "clmStage", newVal: "ACTIVATE",
               changedAt: { gte: monthStart },
+              client: { managerId: mgr.id },
             },
           }),
           db.activity.count({
