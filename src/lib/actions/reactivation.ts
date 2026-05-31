@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { UserRole, CLMCohort } from "@/generated/prisma/client";
-import { clientAccessWhere } from "@/lib/access";
+import { teamWorkFilter } from "@/lib/access";
 
 export type ReactivationFilters = {
   search?: string;
@@ -27,7 +27,7 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
     isArchived: false,
     AND: [
       { OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }] },
-      clientAccessWhere(session),
+      teamWorkFilter(session), // KAM-8: KAM видит только своих, SPECIALIST — только своих
     ],
   };
 
