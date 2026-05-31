@@ -361,18 +361,34 @@ function NewDealForm({
             )}
           </div>
 
-          {/* ── Название (только для нового лида) ── */}
+          {/* ── Тип клиента + название (только для нового лида) ── */}
           {(innStatus.state === "new" || innStatus.state === "idle") && (
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Название компании {innStatus.state === "new" && <span className="text-red-400">*</span>}
-              </label>
-              <input
-                name="leadName"
-                placeholder="ОсОО «МегаТрейд», ИП Алиев..."
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mbank-green)]"
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Тип клиента</label>
+                <div className="flex gap-2">
+                  {([{ value: "YL", label: "ОсОО" }, { value: "IP", label: "ИП" }] as const).map((t) => (
+                    <label
+                      key={t.value}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-sm cursor-pointer has-[:checked]:border-[var(--mbank-green)] has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800 transition-colors"
+                    >
+                      <input type="radio" name="clientType" value={t.value} defaultChecked={t.value === "YL"} className="sr-only" />
+                      {t.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Название компании {innStatus.state === "new" && <span className="text-red-400">*</span>}
+                </label>
+                <input
+                  name="leadName"
+                  placeholder="ОсОО «МегаТрейд», ИП Алиев..."
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--mbank-green)]"
+                />
+              </div>
+            </>
           )}
 
           {/* ── Контактное лицо ── */}

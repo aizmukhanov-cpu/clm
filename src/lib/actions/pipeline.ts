@@ -158,10 +158,14 @@ export async function createDeal(
     if (notes)             metaParts.push(`note:${notes}`);
     finalNotes = metaParts.length > 0 ? metaParts.join("|") : null;
   } else {
-    // B2B: notes уже structured (contact:…|phone:…|addr:…|note:…), добавляем inn если нужно
+    // B2B: форма собирает notes на клиенте (contact:…|phone:…|addr:…|note:…)
+    // Дополняем inn и clientType (YL/IP), чтобы closeDeal мог создать клиента верно
     finalNotes = notes;
     if (inn && !clientId) {
       finalNotes = finalNotes ? `inn:${inn}|${finalNotes}` : `inn:${inn}`;
+    }
+    if (clientType) {
+      finalNotes = finalNotes ? `${finalNotes}|clientType:${clientType}` : `clientType:${clientType}`;
     }
   }
 

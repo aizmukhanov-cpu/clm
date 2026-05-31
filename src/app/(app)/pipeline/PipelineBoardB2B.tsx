@@ -360,6 +360,22 @@ function NewLeadForm({
             )}
           </div>
 
+          {/* Client type — ОсОО / ИП */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Тип клиента</label>
+            <div className="flex gap-2">
+              {([{ value: "YL", label: "ОсОО" }, { value: "IP", label: "ИП" }] as const).map((t) => (
+                <label
+                  key={t.value}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-2 text-sm cursor-pointer has-[:checked]:border-[var(--mbank-green)] has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-800 transition-colors"
+                >
+                  <input type="radio" name="clientType" value={t.value} defaultChecked={t.value === "YL"} className="sr-only" />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Company name */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1.5">
