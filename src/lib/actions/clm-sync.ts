@@ -3,8 +3,8 @@
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { UserRole, CLMStage, CLMCohort } from "@/generated/prisma/client";
-import { calcCohort, calcStageTransition } from "@/lib/clm-rules";
-import type { CohortKey, StageKey } from "@/lib/clm-rules";
+import { calcCohort, calcStageTransition, calcSizeCategory } from "@/lib/clm-rules";
+import type { CohortKey, StageKey, SizeCategoryKey } from "@/lib/clm-rules";
 import { capturePortfolioSnapshot } from "@/lib/actions/snapshots";
 import { getObsoleteTriggers } from "@/lib/rfm-sync";
 
@@ -63,6 +63,8 @@ export async function runCLMSync(): Promise<SyncResult> {
       txnCount30d: true,
       gmv30d: true,
       daysSinceLastTxn: true,
+      sizeCategory: true,   // BUG-7: нужен для обновления размерной категории
+      activatedAt: true,    // BUG-7: нужен чтобы не затирать уже проставленную дату
     },
   });
 
@@ -88,13 +90,24 @@ export async function runCLMSync(): Promise<SyncResult> {
       daysSinceLastTxn: client.daysSinceLastTxn,
     };
 
-    const newCohort = calcCohort(snapshot);
-    const newStage  = calcStageTransition(snapshot); // null = no change
+    const newCohort       = calcCohort(snapshot);
+    const newStage        = calcStageTransition(snapshot); // null = no change
+    const newSizeCategory = calcSizeCategory(client.gmv30d) as SizeCategoryKey;
 
     const cohortChanged = newCohort !== client.clmCohort;
     const stageChanged  = newStage !== null && newStage !== client.clmStage;
+    const sizeChanged   = newSizeCategory !== client.sizeCategory;
 
-    if (!cohortChanged && !stageChanged) {
+    // BUG-7: activatedAt — проставляем при первом входе в ACTIVATE (как в rfm-sync)
+    const now = new Date();
+    const enteringActivate = stageChanged && newStage === "ACTIVATE";
+    const alreadyActiveNoDate =
+      !stageChanged &&
+      (client.clmStage === "ACTIVATE" || client.clmStage === "GROW") &&
+      client.activatedAt === null;
+    const setActivatedAt = (enteringActivate || alreadyActiveNoDate) && client.activatedAt === null;
+
+    if (!cohortChanged && !stageChanged && !sizeChanged && !setActivatedAt) {
       skipped++;
       continue;
     }
@@ -141,6 +154,10 @@ export async function runCLMSync(): Promise<SyncResult> {
       });
       stageUpdated++;
     }
+
+    // BUG-7: синхронизируем sizeCategory и activatedAt (rfm-sync это делал, clm-sync — нет)
+    if (sizeChanged)    updateData.sizeCategory = newSizeCategory;
+    if (setActivatedAt) updateData.activatedAt  = now;
 
     // BRANCH-5: отменяем задачи, устаревшие после автоперехода стадии
     const obsoleteTriggers = stageChanged && newStage
