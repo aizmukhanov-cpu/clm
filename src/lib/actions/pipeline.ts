@@ -127,8 +127,8 @@ export async function createDeal(
       if (existing) {
         return `Клиент «${existing.name}» (ИНН ${inn}) уже есть в базе. B2B пайплайн — только для новых клиентов.`;
       }
-    } else if (team === "KM") {
-      // KM — если клиент есть в базе, линкуем сделку к нему
+    } else if (team === "KM" || team === "BRANCH") {
+      // KM/BRANCH — если клиент есть в базе, линкуем сделку к нему
       if (existing) {
         clientId = existing.id;
         finalLeadName = null; // используем имя из client
