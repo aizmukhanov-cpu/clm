@@ -23,9 +23,10 @@ type ProductField = "hasMBusiness" | "hasMKassaPos" | "hasMKassaQr" | "hasSalary
 
 /* ─── Данные ───────────────────────────────────────────── */
 
-async function getBranchData(year: number) {
+async function getBranchData(year: number, branchId?: string | null) {
   const [branches, targets] = await Promise.all([
     db.branch.findMany({
+      where: branchId ? { id: branchId } : undefined, // BRANCH-3: scope by branch
       include: {
         clients: {
           where: { isArchived: false },
@@ -105,7 +106,14 @@ export default async function BranchesPage() {
   }
 
   const year = new Date().getFullYear();
-  const branches = await getBranchData(year);
+  // BRANCH-3: SPECIALIST/SUPERVISOR в команде BRANCH видят только свой филиал
+  const branchScopeId =
+    (session.role === "SPECIALIST" || session.role === "SUPERVISOR") &&
+    session.team === "BRANCH" &&
+    session.branchId
+      ? session.branchId
+      : null;
+  const branches = await getBranchData(year, branchScopeId);
 
   const grandTotal   = branches.reduce((s, b) => s + b.totalClients, 0);
   const grandActive  = branches.reduce((s, b) => s + b.activeClients, 0);
