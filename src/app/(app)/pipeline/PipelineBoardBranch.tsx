@@ -237,6 +237,24 @@ function NewDealForm({
           </div>
 
           <div>
+            <label className="block text-xs text-gray-500 mb-1">Тип клиента</label>
+            <div className="flex gap-2">
+              {[
+                { value: "YL", label: "ОсОО" },
+                { value: "IP", label: "ИП" },
+              ].map((t) => (
+                <label
+                  key={t.value}
+                  className="flex-1 flex items-center justify-center rounded-lg border border-gray-200 px-3 py-2 text-sm cursor-pointer has-[:checked]:border-[var(--mbank-green)] has-[:checked]:bg-[var(--mbank-green-pale)] has-[:checked]:text-[var(--mbank-green)] transition-colors"
+                >
+                  <input type="radio" name="clientType" value={t.value} defaultChecked={t.value === "YL"} className="sr-only" />
+                  {t.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <label className="block text-xs text-gray-500 mb-1">Контактное лицо</label>
             <input
               name="contact"

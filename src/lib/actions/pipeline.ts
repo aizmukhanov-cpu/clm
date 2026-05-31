@@ -109,9 +109,10 @@ export async function createDeal(
   const probRaw    = formData.get("probability") as string;
   const closeRaw   = formData.get("expectedClose") as string;
   const notes      = (formData.get("notes") as string)?.trim() || null;
-  // KM-specific contact fields
-  const contact    = (formData.get("contact") as string)?.trim() || null;
-  const phone      = (formData.get("phone")   as string)?.trim() || null;
+  // KM/BRANCH contact fields
+  const contact    = (formData.get("contact")    as string)?.trim() || null;
+  const phone      = (formData.get("phone")      as string)?.trim() || null;
+  const clientType = (formData.get("clientType") as string)?.trim() || null; // "YL"|"IP" для BRANCH
 
   let clientId: string | null = (formData.get("clientId") as string)?.trim() || null;
   let finalLeadName = leadName || null;
@@ -153,6 +154,7 @@ export async function createDeal(
     if (inn && !clientId)  metaParts.push(`inn:${inn}`);
     if (contact)           metaParts.push(`contact:${contact}`);
     if (phone)             metaParts.push(`phone:${phone}`);
+    if (clientType)        metaParts.push(`clientType:${clientType}`); // BRANCH-2: тип ЮЛ/ИП
     if (notes)             metaParts.push(`note:${notes}`);
     finalNotes = metaParts.length > 0 ? metaParts.join("|") : null;
   } else {
@@ -347,7 +349,7 @@ export async function closeDeal(
                 data: {
                   inn,
                   name:       deal.leadName ?? `Клиент ИНН ${inn}`,
-                  type:       "YL",
+                  type:       (meta["clientType"] === "IP" ? "IP" : "YL") as "YL" | "IP", // BRANCH-2
                   branchId:   owner.branchId!,
                   managerId:  deal.ownerId,
                   clmStage:   "ONBOARD",
