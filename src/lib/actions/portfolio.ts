@@ -32,6 +32,8 @@ export async function getMyClients(params: {
   const page = Math.max(1, params.page ?? 1);
 
   const buildBase = (): Record<string, unknown> => {
+    // VB (Virtual Branch) — работает со всей клиентской базой банка
+    if (session.team === "VB") return { isArchived: false };
     if (session.role === "SPECIALIST") return { managerId: session.id, isArchived: false };
     if (session.role === "KAM")        return { kamId: session.id, isArchived: false };
     if (session.role === "SUPERVISOR") {
@@ -124,6 +126,8 @@ export async function getMyPortfolio() {
   //   TEAM_LEAD   → whole team clients
   //   others      → all (ADMIN/DIRECTOR/ANALYST redirect to dashboard)
   const buildClientWhere = (): Record<string, unknown> => {
+    // VB (Virtual Branch) — работает со всей клиентской базой банка
+    if (session.team === "VB") return { isArchived: false };
     if (session.role === "SPECIALIST") return { managerId: session.id, isArchived: false };
     if (session.role === "KAM")        return { kamId: session.id, isArchived: false };
     if (session.role === "SUPERVISOR") {
