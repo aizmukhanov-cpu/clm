@@ -75,7 +75,10 @@ export async function getMyClients(params: {
         clmStage: true, clmCohort: true,
         txnCount30d: true, gmv30d: true, daysSinceLastTxn: true,
         _count: {
-          select: { tasks: true },
+          select: {
+            // BRANCH-7: считаем только открытые задачи, не все
+            tasks: { where: { status: { notIn: ["DONE", "CANCELLED"] as const } } },
+          },
         },
       },
       orderBy: [{ daysSinceLastTxn: "desc" }],
