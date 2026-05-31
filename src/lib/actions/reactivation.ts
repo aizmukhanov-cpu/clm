@@ -2,8 +2,8 @@
 
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { UserRole, CLMCohort } from "@/generated/prisma/client";
-import { teamWorkFilter } from "@/lib/access";
+import { CLMCohort } from "@/generated/prisma/client";
+import { teamWorkFilter, hasGlobalAccess } from "@/lib/access";
 
 export type ReactivationFilters = {
   search?: string;
@@ -15,6 +15,29 @@ export type ReactivationFilters = {
 
 const PAGE_SIZE = 50;
 
+/**
+ * VB (Virtual Branch) — выделенная команда реактивации.
+ * Сотрудники колл-центра работают со ВСЕМИ лапсед/REACTIVATE клиентами банка,
+ * а не только с теми, кто закреплён за ними лично.
+ *
+ * Для всех остальных ролей применяется стандартный teamWorkFilter:
+ *   KAM         → только свои KAM-клиенты
+ *   SPECIALIST  → только свои клиенты (managerId = me)
+ *   SUPERVISOR  → свои + подчинённых
+ *   TEAM_LEAD   → вся своя команда
+ */
+function reactivationScopeFilter(session: {
+  role: string;
+  team?: string | null;
+  id: string;
+  name: string;
+  email: string;
+}): Record<string, unknown> {
+  if (hasGlobalAccess(session as Parameters<typeof hasGlobalAccess>[0])) return {};
+  if (session.team === "VB") return {}; // VB видит всех — это их работа
+  return teamWorkFilter(session as Parameters<typeof teamWorkFilter>[0]);
+}
+
 export async function getReactivationList(filters: ReactivationFilters = {}) {
   const session = await getSession();
   if (!session) return { clients: [], total: 0, pages: 0, managers: [] };
@@ -22,17 +45,19 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
   const page = filters.page ?? 1;
   const skip = (page - 1) * PAGE_SIZE;
 
+  const scopeFilter = reactivationScopeFilter(session);
+
   // Reactivation = LAPSED cohort or REACTIVATE stage
   const where: Record<string, unknown> = {
     isArchived: false,
     AND: [
       { OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }] },
-      teamWorkFilter(session), // KAM-8: KAM видит только своих, SPECIALIST — только своих
+      scopeFilter,
     ],
   };
 
   if (filters.search) {
-    // Расширяем AND, не заменяем — иначе теряются teamWorkFilter и LAPSED/REACTIVATE фильтр
+    // Расширяем AND, не заменяем — иначе теряются scope и LAPSED/REACTIVATE фильтр
     (where.AND as unknown[]).push({
       OR: [
         { inn:  { contains: filters.search, mode: "insensitive" } },
@@ -43,9 +68,12 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
   if (filters.minDays) {
     where.daysSinceLastTxn = { gte: filters.minDays };
   }
-  // Фильтр по менеджеру доступен только admin/analyst
-  if ((session.role === "ADMIN" || session.role === "ANALYST") &&
-      filters.managerId && filters.managerId !== "ALL") {
+
+  // Фильтр по менеджеру: admin/analyst — полный выбор;
+  // VB — тоже, т.к. они видят всех и могут захотеть отфильтровать «клиенты KM-команды».
+  const canFilterByManager =
+    session.role === "ADMIN" || session.role === "ANALYST" || session.team === "VB";
+  if (canFilterByManager && filters.managerId && filters.managerId !== "ALL") {
     where.managerId = filters.managerId;
   }
 
@@ -74,18 +102,22 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
     db.client.count({ where }),
   ]);
 
-  const managers =
-    session.role === "SPECIALIST" || session.role === "KAM"
-      ? []
-      : await db.user.findMany({
-          where: { role: { in: ["SPECIALIST", "SUPERVISOR"] } },
-          select: { id: true, name: true },
-          orderBy: { name: "asc" },
-        });
+  // Менеджеры для фильтра:
+  //   admin/analyst — полный список;
+  //   VB — полный список (видят всех клиентов → нужен фильтр по менеджеру);
+  //   остальные SPECIALIST/KAM — пустой (они видят только своих).
+  const needsManagerList =
+    session.role !== "SPECIALIST" && session.role !== "KAM" || session.team === "VB";
+  const managers = needsManagerList
+    ? await db.user.findMany({
+        where: { role: { in: ["SPECIALIST", "SUPERVISOR"] } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
 
-  // Статистика ограничена тем же scope, что и список — иначе SPECIALIST видел бы
-  // глобальные цифры («150 в реактивации»), хотя в его списке всего 5 клиентов.
-  const scopeFilter = teamWorkFilter(session);
+  // Статистика использует тот же scope что и список.
+  // VB видит глобальную статистику (это их рабочая очередь).
   const baseStatWhere = {
     isArchived: false,
     AND: [
