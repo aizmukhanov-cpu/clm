@@ -6,6 +6,7 @@ import { UserRole, CLMStage, CLMCohort } from "@/generated/prisma/client";
 import { calcCohort, calcStageTransition } from "@/lib/clm-rules";
 import type { CohortKey, StageKey } from "@/lib/clm-rules";
 import { capturePortfolioSnapshot } from "@/lib/actions/snapshots";
+import { getObsoleteTriggers } from "@/lib/rfm-sync";
 
 export type SyncResult = {
   error?: string;
@@ -141,13 +142,31 @@ export async function runCLMSync(): Promise<SyncResult> {
       stageUpdated++;
     }
 
-    // Run update + changelog in a transaction
+    // BRANCH-5: отменяем задачи, устаревшие после автоперехода стадии
+    const obsoleteTriggers = stageChanged && newStage
+      ? getObsoleteTriggers(client.clmStage, newStage)
+      : [];
+
+    // Run update + changelog + task cancellation in a transaction
     await db.$transaction([
       db.client.update({
         where: { id: client.id },
         data:  updateData,
       }),
       ...changelogEntries.map((e) => db.changelog.create({ data: e })),
+      ...(obsoleteTriggers.length > 0
+        ? [db.task.updateMany({
+            where: {
+              clientId:   client.id,
+              triggerDay: { in: obsoleteTriggers },
+              status:     { in: ["PENDING", "OVERDUE"] },
+            },
+            data: {
+              status: "CANCELLED",
+              result: `Авто-отмена: CLM sync ${client.clmStage} → ${newStage}`,
+            },
+          })]
+        : []),
     ]);
 
     details.push(detail);
