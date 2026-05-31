@@ -197,8 +197,9 @@ export function getNextBestActions(c: ClientSignals): NBARecommendation[] {
   }
 
   // ── ACCOUNT REVIEW (для KAM-клиентов) ────────────────────
-  // P1 — не подавляется: KAM обязан знать о просроченном review
-  if (c.isKAMClient && c.lastActivityDays !== null && c.lastActivityDays > 60) {
+  // P1 — не подавляется: KAM обязан знать о просроченном review.
+  // KAM-9: при REACTIVATE этот P1 дублирует «Срочная реактивация» — подавляем.
+  if (c.isKAMClient && c.lastActivityDays !== null && c.lastActivityDays > 60 && c.clmStage !== "REACTIVATE") {
     recs.push({
       priority: "P1",
       icon: "🤝",
