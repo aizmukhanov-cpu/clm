@@ -37,6 +37,15 @@ export function getObsoleteTriggers(oldStage: string, newStage: string): string[
     case "ACTIVATE→GROW":
       return ["D+1", "D+3", "D+7", "D+14", "no-touch-30d"];
 
+    // Клиент стал дормантным из ACTIVATE → reactivation-30d (P2) устаревает,
+    // reactivation-60d (P1) будет создан event-triggers в ту же ночь
+    case "ACTIVATE→REACTIVATE":
+      return ["reactivation-30d", "no-touch-30d"];
+
+    // Клиент стал дормантным из GROW → то же + grow-account-plan больше не актуален
+    case "GROW→REACTIVATE":
+      return ["reactivation-30d", "no-touch-30d", "grow-account-plan"];
+
     default:
       return [];
   }
