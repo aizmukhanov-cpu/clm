@@ -83,23 +83,24 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
           orderBy: { name: "asc" },
         });
 
+  // Статистика ограничена тем же scope, что и список — иначе SPECIALIST видел бы
+  // глобальные цифры («150 в реактивации»), хотя в его списке всего 5 клиентов.
+  const scopeFilter = teamWorkFilter(session);
+  const baseStatWhere = {
+    isArchived: false,
+    AND: [
+      { OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }] },
+      scopeFilter,
+    ],
+  };
+
   const stats = {
-    total: await db.client.count({
-      where: { isArchived: false, OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }] },
-    }),
+    total: await db.client.count({ where: baseStatWhere }),
     over90: await db.client.count({
-      where: {
-        isArchived: false,
-        OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }],
-        daysSinceLastTxn: { gte: 90 },
-      },
+      where: { ...baseStatWhere, daysSinceLastTxn: { gte: 90 } },
     }),
     noContact: await db.client.count({
-      where: {
-        isArchived: false,
-        OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }],
-        activities: { none: {} },
-      },
+      where: { ...baseStatWhere, activities: { none: {} } },
     }),
   };
 
