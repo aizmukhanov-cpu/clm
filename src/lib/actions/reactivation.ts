@@ -32,14 +32,13 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
   };
 
   if (filters.search) {
-    where.AND = [
-      {
-        OR: [
-          { inn:  { contains: filters.search, mode: "insensitive" } },
-          { name: { contains: filters.search, mode: "insensitive" } },
-        ],
-      },
-    ];
+    // Расширяем AND, не заменяем — иначе теряются teamWorkFilter и LAPSED/REACTIVATE фильтр
+    (where.AND as unknown[]).push({
+      OR: [
+        { inn:  { contains: filters.search, mode: "insensitive" } },
+        { name: { contains: filters.search, mode: "insensitive" } },
+      ],
+    });
   }
   if (filters.minDays) {
     where.daysSinceLastTxn = { gte: filters.minDays };
