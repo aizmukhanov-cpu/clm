@@ -21,7 +21,8 @@ enum CLMCohort {
   NEVER_ACTIVE
   LOW_ACTIVE
   ACTIVE
-  LAPSED
+  LAPSED        // 60–179 дней без транзакций — тёплый отток, реактивация реалистична
+  LAPSED_DEEP   // 180+ дней без транзакций — холодный отток, нужен win-back сценарий
 }
 
 enum ClientType {

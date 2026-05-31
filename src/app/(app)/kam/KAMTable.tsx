@@ -29,6 +29,7 @@ const COHORT_STYLE: Record<string, { bg: string; text: string; label: string }> 
   LOW_ACTIVE:   { bg: "#fffbeb",                 text: "#d97706",             label: "Низкая акт." },
   NEVER_ACTIVE: { bg: "#f3f4f6",                 text: "#6b7280",             label: "Нет акт." },
   LAPSED:       { bg: "#fef2f2",                 text: "#dc2626",             label: "Отток" },
+  LAPSED_DEEP:  { bg: "#fee2e2",                 text: "#991b1b",             label: "Глуб. отток" },
 };
 
 function fmtGmv(v: number) {
@@ -84,6 +85,7 @@ export function KAMTable({
           <option value="LOW_ACTIVE">Низкая активность</option>
           <option value="NEVER_ACTIVE">Нет активности</option>
           <option value="LAPSED">Отток</option>
+          <option value="LAPSED_DEEP">Глубокий отток</option>
         </select>
         {kams.length > 0 && (
           <select

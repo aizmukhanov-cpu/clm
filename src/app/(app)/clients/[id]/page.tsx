@@ -26,6 +26,7 @@ const COHORT_LABEL: Record<string, string> = {
   LOW_ACTIVE:   "Низкая активность",
   ACTIVE:       "Активный",
   LAPSED:       "Отток",
+  LAPSED_DEEP:  "Глубокий отток",
 };
 
 const SIZE_LABEL: Record<string, string> = {
@@ -43,6 +44,7 @@ const COHORT_STYLE: Record<string, { bg: string; text: string }> = {
   LOW_ACTIVE:   { bg: "#fefce8", text: "#92400e" },
   ACTIVE:       { bg: "var(--mbank-green-pale)", text: "var(--mbank-green)" },
   LAPSED:       { bg: "#fef2f2", text: "#dc2626" },
+  LAPSED_DEEP:  { bg: "#fee2e2", text: "#991b1b" },
 };
 
 const ACTIVITY_ICON: Record<string, string> = {

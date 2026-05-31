@@ -8,7 +8,7 @@
  * В production эти поля обновляются CDC-пайплайном из core banking.
  */
 
-export type CohortKey        = "NEVER_ACTIVE" | "LOW_ACTIVE" | "ACTIVE" | "LAPSED";
+export type CohortKey        = "NEVER_ACTIVE" | "LOW_ACTIVE" | "ACTIVE" | "LAPSED" | "LAPSED_DEEP";
 export type StageKey         = "ACQUIRE" | "ONBOARD" | "ACTIVATE" | "GROW" | "REACTIVATE";
 export type SizeCategoryKey  = "SMALL" | "MEDIUM" | "LARGE";
 
@@ -18,7 +18,8 @@ export type SizeCategoryKey  = "SMALL" | "MEDIUM" | "LARGE";
 export const THRESHOLDS = {
   // Когорты
   ACTIVE_TXN_MIN:     3,        // мин. кол-во транзакций за 30д → ACTIVE
-  LAPSED_DAYS:       60,        // дней без транзакций → LAPSED
+  LAPSED_DAYS:       60,        // дней без транзакций → LAPSED (60–179д, тёплый отток)
+  LAPSED_DEEP_DAYS: 180,        // дней без транзакций → LAPSED_DEEP (180+д, холодный отток)
 
   // Переходы стадий
   ONBOARD_TXN:        1,        // транзакций за 30д → выход из ONBOARD
@@ -114,8 +115,9 @@ export function calcCohort(c: ClientSnapshot): CohortKey {
 
   if (txnCount30d > 0) return "LOW_ACTIVE";
 
-  // Нет транзакций за 30д — смотрим историю
-  if (daysSinceLastTxn >= THRESHOLDS.LAPSED_DAYS) return "LAPSED";
+  // Нет транзакций за 30д — смотрим глубину оттока
+  if (daysSinceLastTxn >= THRESHOLDS.LAPSED_DEEP_DAYS) return "LAPSED_DEEP"; // 180+ дней
+  if (daysSinceLastTxn >= THRESHOLDS.LAPSED_DAYS)      return "LAPSED";      // 60–179 дней
 
   return "NEVER_ACTIVE";
 }

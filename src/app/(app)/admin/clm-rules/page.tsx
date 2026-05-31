@@ -36,6 +36,7 @@ const COHORT_LABELS: Record<string, string> = {
   LOW_ACTIVE:   "Слабый",
   ACTIVE:       "Активный",
   LAPSED:       "Потерянный",
+  LAPSED_DEEP:  "Глуб. отток",
 };
 
 const STAGE_COLORS: Record<string, string> = {
@@ -67,7 +68,7 @@ export default async function CLMRulesPage() {
   const stats = await getCLMStats();
 
   const ALL_STAGES = ["ACQUIRE", "ONBOARD", "ACTIVATE", "GROW", "REACTIVATE"];
-  const ALL_COHORTS = ["NEVER_ACTIVE", "LOW_ACTIVE", "ACTIVE", "LAPSED"];
+  const ALL_COHORTS = ["NEVER_ACTIVE", "LOW_ACTIVE", "ACTIVE", "LAPSED", "LAPSED_DEEP"];
 
   return (
     <div className="space-y-8">
@@ -129,6 +130,7 @@ export default async function CLMRulesPage() {
                   LOW_ACTIVE:   "bg-yellow-400",
                   ACTIVE:       "bg-emerald-500",
                   LAPSED:       "bg-red-400",
+                  LAPSED_DEEP:  "bg-red-700",
                 };
                 return (
                   <div key={c} className="flex items-center gap-3">
@@ -216,8 +218,9 @@ export default async function CLMRulesPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {(
               [
-                ["Мин. транзакций → ACTIVE когорта",     THRESHOLDS.ACTIVE_TXN_MIN,  "транз./30д"],
-                ["Дней без тр. → LAPSED когорта",        THRESHOLDS.LAPSED_DAYS,     "дней"],
+                ["Мин. транзакций → ACTIVE когорта",     THRESHOLDS.ACTIVE_TXN_MIN,   "транз./30д"],
+                ["Дней без тр. → LAPSED когорта",        THRESHOLDS.LAPSED_DAYS,      "дней"],
+                ["Дней без тр. → LAPSED_DEEP когорта",   THRESHOLDS.LAPSED_DEEP_DAYS, "дней"],
                 ["Транзакций → выход из ONBOARD",        THRESHOLDS.ONBOARD_TXN,     "транз."],
                 ["Мин. транзакций → GROW",               THRESHOLDS.GROW_TXN_MIN,    "транз./30д"],
                 ["Мин. GMV → GROW",                      THRESHOLDS.GROW_GMV_MIN / 1000, "тыс. сом/30д"],

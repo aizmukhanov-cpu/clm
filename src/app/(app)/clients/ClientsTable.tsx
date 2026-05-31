@@ -79,12 +79,14 @@ const COHORT_STYLE: Record<string, string> = {
   LOW_ACTIVE:   "bg-yellow-50 text-yellow-700",
   ACTIVE:       "text-white",
   LAPSED:       "bg-red-50 text-red-600",
+  LAPSED_DEEP:  "bg-red-100 text-red-800",
 };
 const COHORT_LABEL: Record<string, string> = {
   NEVER_ACTIVE: "Нет актив.",
   LOW_ACTIVE:   "Низк. акт.",
   ACTIVE:       "Активный",
   LAPSED:       "Отток",
+  LAPSED_DEEP:  "Глуб. отток",
 };
 
 function StageBadge({ stage }: { stage: string }) {

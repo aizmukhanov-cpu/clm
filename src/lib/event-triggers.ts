@@ -149,6 +149,21 @@ const TRIGGER_RULES: TriggerRule[] = [
     daysUntilDue: 0,
     assignTo: (c) => c.kamId ?? c.managerId,
   },
+  {
+    id:       "reactivation-180d",
+    name:     "180 дней без транзакций — Win-back",
+    priority: "P1",
+    // Холодный отток (LAPSED_DEEP): клиент ушёл 6+ месяцев назад.
+    // Стандартные звонки уже не работают — нужен персональный win-back сценарий.
+    // Создаётся только один раз (cooldown 180d закреплён в COOLDOWN_DAYS ниже).
+    condition: (c, existing) =>
+      c.clmCohort === "LAPSED_DEEP" &&
+      c.clmStage !== "ACQUIRE" &&
+      !existing.includes("reactivation-180d"),
+    action:   "WIN-BACK: клиент 180+ дней без транзакций. Персональное предложение возврата: особые условия, звонок от руководителя направления",
+    daysUntilDue: 2,
+    assignTo: (c) => c.kamId ?? c.managerId,
+  },
 
   // ── КРОСС-ПРОДАЖИ ────────────────────────────────────────
   {
@@ -306,6 +321,7 @@ export async function runEventTriggers(): Promise<TriggerResult> {
     "cross-sell-acquiring":  90,
     "cross-sell-salary":     90,
     "qbr-overdue":           90,  // KAM-5: не создавать снова ранее чем через 90 дней после выполнения
+    "reactivation-180d":    180,  // Win-back: не спамить, раз в полгода
   };
   const maxCooldown = Math.max(...Object.values(COOLDOWN_DAYS));
   const cooldownCutoff = new Date(Date.now() - maxCooldown * 86_400_000);

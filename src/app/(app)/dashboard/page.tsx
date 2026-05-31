@@ -23,6 +23,7 @@ const COHORT_LABELS: Record<string, string> = {
   LOW_ACTIVE:   "Низкая акт.",
   NEVER_ACTIVE: "Нет акт.",
   LAPSED:       "Отток",
+  LAPSED_DEEP:  "Глуб. отток",
 };
 
 const COHORT_COLORS: Record<string, { bg: string; bar: string }> = {
@@ -30,6 +31,7 @@ const COHORT_COLORS: Record<string, { bg: string; bar: string }> = {
   LOW_ACTIVE:   { bg: "#fffbeb", bar: "#f59e0b" },
   NEVER_ACTIVE: { bg: "#f3f4f6", bar: "#9ca3af" },
   LAPSED:       { bg: "#fef2f2", bar: "#ef4444" },
+  LAPSED_DEEP:  { bg: "#fee2e2", bar: "#991b1b" },
 };
 
 const STAGE_FUNNEL_COLORS: Record<CLMStage, { bg: string; text: string }> = {

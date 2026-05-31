@@ -28,6 +28,7 @@ const COHORT_LABELS: Record<string, string> = {
   LOW_ACTIVE:   "Слабый",
   ACTIVE:       "Активный",
   LAPSED:       "Потерянный",
+  LAPSED_DEEP:  "Глуб. отток",
 };
 
 const STAGE_COLORS: Record<string, string> = {
@@ -52,6 +53,7 @@ function CohortBadge({ cohort }: { cohort: string }) {
     LOW_ACTIVE:   "bg-yellow-100 text-yellow-700",
     ACTIVE:       "bg-green-100 text-green-700",
     LAPSED:       "bg-red-100 text-red-700",
+    LAPSED_DEEP:  "bg-red-200 text-red-900",
   };
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colors[cohort] ?? "bg-gray-100 text-gray-700"}`}>

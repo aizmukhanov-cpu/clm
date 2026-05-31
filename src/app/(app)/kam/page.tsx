@@ -9,10 +9,12 @@ const COHORT_COLORS: Record<string, string> = {
   LOW_ACTIVE:   "#f59e0b",
   NEVER_ACTIVE: "#9ca3af",
   LAPSED:       "#ef4444",
+  LAPSED_DEEP:  "#991b1b",
 };
 
 const COHORT_LABELS: Record<string, string> = {
-  ACTIVE: "Активные", LOW_ACTIVE: "Низкая акт.", NEVER_ACTIVE: "Нет акт.", LAPSED: "Отток",
+  ACTIVE: "Активные", LOW_ACTIVE: "Низкая акт.", NEVER_ACTIVE: "Нет акт.",
+  LAPSED: "Отток", LAPSED_DEEP: "Глуб. отток",
 };
 
 async function KAMContent({ sp }: { sp: Record<string, string> }) {
@@ -35,7 +37,7 @@ async function KAMContent({ sp }: { sp: Record<string, string> }) {
           <div className="text-xs text-gray-400 mb-1">KAM-клиентов всего</div>
           <div className="text-2xl font-bold text-gray-900">{totalKAM}</div>
         </div>
-        {["ACTIVE", "LOW_ACTIVE", "LAPSED"].map((cohort) => {
+        {["ACTIVE", "LOW_ACTIVE", "LAPSED", "LAPSED_DEEP"].map((cohort) => {
           const g = stats.find((s) => s.clmCohort === cohort);
           return (
             <div key={cohort} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">

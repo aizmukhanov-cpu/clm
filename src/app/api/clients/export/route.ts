@@ -7,7 +7,10 @@ import { getSession } from "@/lib/auth";
 
 function esc(v: string | number | null | undefined): string {
   if (v === null || v === undefined) return "";
-  const s = String(v);
+  let s = String(v);
+  // Защита от CSV/формула-инъекции: текстовые поля, начинающиеся с = + - @
+  // (или управляющих символов), Excel может выполнить как формулу.
+  if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
@@ -51,7 +54,7 @@ export async function GET(req: NextRequest) {
   });
 
   const STAGE_LABEL: Record<string, string> = { ACQUIRE:"Привлечение", ONBOARD:"Онбординг", ACTIVATE:"Активация", GROW:"Рост", REACTIVATE:"Реактивация" };
-  const COHORT_LABEL: Record<string, string> = { NEVER_ACTIVE:"Нет активности", LOW_ACTIVE:"Низкая активность", ACTIVE:"Активный", LAPSED:"Отток" };
+  const COHORT_LABEL: Record<string, string> = { NEVER_ACTIVE:"Нет активности", LOW_ACTIVE:"Низкая активность", ACTIVE:"Активный", LAPSED:"Отток", LAPSED_DEEP:"Глубокий отток" };
 
   const headers = ["ИНН","Название","Тип","Филиал","Команда","Менеджер","KAM","CLM Стадия","Когорта","Транзакций 30д","Дней без тр.","GMV 30д (сом)","Продуктов","MBusiness","MKassa POS","MKassa QR","Эквайринг","ЗП-проект","Зарплата","Корп.карта","Кредит","Депозит","Торг.фин."];
 

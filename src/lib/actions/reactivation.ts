@@ -47,11 +47,17 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
 
   const scopeFilter = reactivationScopeFilter(session);
 
-  // Reactivation = LAPSED cohort or REACTIVATE stage
+  // Reactivation = любой LAPSED-когорт (тёплый или глубокий) или стадия REACTIVATE
   const where: Record<string, unknown> = {
     isArchived: false,
     AND: [
-      { OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }] },
+      {
+        OR: [
+          { clmCohort: CLMCohort.LAPSED },
+          { clmCohort: CLMCohort.LAPSED_DEEP },
+          { clmStage: "REACTIVATE" },
+        ],
+      },
       scopeFilter,
     ],
   };
@@ -121,7 +127,13 @@ export async function getReactivationList(filters: ReactivationFilters = {}) {
   const baseStatWhere = {
     isArchived: false,
     AND: [
-      { OR: [{ clmCohort: CLMCohort.LAPSED }, { clmStage: "REACTIVATE" }] },
+      {
+        OR: [
+          { clmCohort: CLMCohort.LAPSED },
+          { clmCohort: CLMCohort.LAPSED_DEEP },
+          { clmStage: "REACTIVATE" },
+        ],
+      },
       scopeFilter,
     ],
   };
