@@ -133,7 +133,7 @@ export async function changeStage(clientId: string, newStage: CLMStage) {
 
   const client = await db.client.findUnique({
     where: { id: clientId },
-    select: { clmStage: true, managerId: true },
+    select: { clmStage: true, managerId: true, kamId: true },
   });
   if (!client) return { error: "Клиент не найден" };
 
@@ -210,7 +210,7 @@ export async function changeStage(clientId: string, newStage: CLMStage) {
           data: {
             clientId,
             triggerDay: "D+1",
-            assignedTo:  client.managerId ?? session.id,
+            assignedTo:  client.managerId ?? client.kamId ?? session.id,
             dueDate:     due,
             priority:    "P3",
             action:      "Welcome — помочь с настройкой MBusiness",
