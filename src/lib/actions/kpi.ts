@@ -62,6 +62,12 @@ async function calcManagerKPI(
   prevStart: Date,
   prevEnd: Date,
 ): Promise<ManagerKPI> {
+  // KAM-клиенты привязаны через kamId, обычные менеджеры — через managerId
+  const isKAM = m.team === "KAM";
+  const clientOwnerFilter = isKAM
+    ? { kamId: m.id }
+    : { managerId: m.id };
+
   const [
     totalClients,
     activeClients,
@@ -72,9 +78,9 @@ async function calcManagerKPI(
     activitiesPrev,
     activations,
   ] = await Promise.all([
-    db.client.count({ where: { managerId: m.id, isArchived: false } }),
+    db.client.count({ where: { ...clientOwnerFilter, isArchived: false } }),
     db.client.count({
-      where: { managerId: m.id, isArchived: false, txnCount30d: { gte: 1 }, gmv30d: { gt: 100 } },
+      where: { ...clientOwnerFilter, isArchived: false, txnCount30d: { gte: 1 }, gmv30d: { gt: 100 } },
     }),
     db.task.count({
       where: { assignedTo: m.id, status: { notIn: ["DONE", "CANCELLED"] as const }, dueDate: { gte: now } },
@@ -92,8 +98,12 @@ async function calcManagerKPI(
       where: { performedBy: m.id, performedAt: { gte: prevStart, lte: prevEnd } },
     }),
     db.changelog.count({
-      // BRANCH-6: считаем ВСЕ активации клиентов менеджера (ручные + авто CLM sync)
-      where: { field: "clmStage", newVal: "ACTIVATE", changedAt: { gte: monthStart }, client: { managerId: m.id } },
+      // Считаем ВСЕ активации клиентов менеджера (ручные + авто CLM sync)
+      // KAM: клиенты привязаны через kamId; обычные — через managerId
+      where: {
+        field: "clmStage", newVal: "ACTIVATE", changedAt: { gte: monthStart },
+        client: clientOwnerFilter,
+      },
     }),
   ]);
 
